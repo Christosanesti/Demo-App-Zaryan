@@ -24,14 +24,29 @@ export async function CreateTransaction(form: CreateTransactionSchemaType) {
 
   const { amount, category, date, description, type } = parsedBody.data;
 
-  const categoryRow = await prisma.category.findFirst({
+  // Check if the category is a bank or ledger
+  const isBankOrLedger =
+    category.toLowerCase().includes("bank") ||
+    category.toLowerCase().includes("ledger");
+
+  let categoryRow = await prisma.category.findFirst({
     where: {
       userId: user.id,
       name: category,
     },
   });
 
-  if (!categoryRow) {
+  // If category doesn't exist and it's a bank or ledger, create it
+  if (!categoryRow && isBankOrLedger) {
+    categoryRow = await prisma.category.create({
+      data: {
+        userId: user.id,
+        name: category,
+        type: type,
+        icon: type === "income" ? "arrow-up" : "arrow-down",
+      },
+    });
+  } else if (!categoryRow) {
     throw new Error("Category not found");
   }
 
@@ -74,7 +89,7 @@ export async function CreateTransaction(form: CreateTransactionSchemaType) {
       },
     }),
 
-    prisma.yearHistory.update({
+    prisma.yearHistory.upsert({
       where: {
         month_year_userId: {
           userId: user.id,
@@ -82,7 +97,21 @@ export async function CreateTransaction(form: CreateTransactionSchemaType) {
           year: date.getUTCFullYear(),
         },
       },
-      data: {},
+      create: {
+        userId: user.id,
+        month: date.getUTCMonth(),
+        year: date.getUTCFullYear(),
+        expense: type === "expense" ? amount : 0,
+        income: type === "income" ? amount : 0,
+      },
+      update: {
+        expense: {
+          increment: type === "expense" ? amount : 0,
+        },
+        income: {
+          increment: type === "income" ? amount : 0,
+        },
+      },
     }),
   ]);
 }

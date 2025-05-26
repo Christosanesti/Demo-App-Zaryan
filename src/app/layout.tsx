@@ -30,7 +30,7 @@ export default function RootLayout({
         lang="en"
         className="dark"
         style={{
-          colorScheme: "dark ",
+          colorScheme: "dark",
         }}
       >
         <body
