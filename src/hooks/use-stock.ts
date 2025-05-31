@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import axios from "axios";
 
 export type Stock = {
   id: string;
@@ -29,14 +28,28 @@ export function useStock() {
   const { data: stocks, isLoading } = useQuery({
     queryKey: ["stocks"],
     queryFn: async () => {
-      const { data } = await axios.get("/api/stock");
+      const response = await fetch("/api/stock");
+      if (!response.ok) {
+        throw new Error("Failed to fetch stocks");
+      }
+      const data = await response.json();
       return data as Stock[];
     },
   });
 
   const createStock = useMutation({
     mutationFn: async (values: StockFormValues) => {
-      const { data } = await axios.post("/api/stock", values);
+      const response = await fetch("/api/stock", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(values),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to create stock");
+      }
+      const data = await response.json();
       return data;
     },
     onSuccess: () => {
@@ -57,7 +70,17 @@ export function useStock() {
       id: string;
       values: StockFormValues;
     }) => {
-      const { data } = await axios.patch(`/api/stock/${id}`, values);
+      const response = await fetch(`/api/stock/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(values),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to update stock");
+      }
+      const data = await response.json();
       return data;
     },
     onSuccess: () => {
@@ -72,7 +95,12 @@ export function useStock() {
 
   const deleteStock = useMutation({
     mutationFn: async (id: string) => {
-      await axios.delete(`/api/stock/${id}`);
+      const response = await fetch(`/api/stock/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to delete stock");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stocks"] });
