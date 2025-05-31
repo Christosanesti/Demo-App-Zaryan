@@ -61,7 +61,7 @@ export default function Page() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 w-full max-w-6xl">
           {/* Sign In Container */}
           <div className="w-full bg-gradient-to-br from-slate-800/50 via-slate-800/30 to-slate-900/50 backdrop-blur-xl border border-slate-700/50 shadow-2xl rounded-2xl p-6 sm:p-8 hover:border-blue-500/50 transition-all duration-300 opacity-100">
-            <SignUp
+            <SignIn
               appearance={{
                 elements: {
                   rootBox: "w-full max-w-none",
