@@ -32,7 +32,14 @@ export async function getCurrentUserWithDB() {
     },
   });
 
-  return user;
+  if (!user) {
+    return null;
+  }
+
+  return {
+    ...user,
+    settings: user.settings ? userSettingsSchema.parse(user.settings) : null,
+  };
 }
 
 /**
@@ -67,10 +74,16 @@ export async function ensureUserInDB() {
         settings: true,
       },
     });
-    return newUser;
+    return {
+      ...newUser,
+      settings: userSettingsSchema.parse(newUser.settings),
+    };
   }
 
-  return user;
+  return {
+    ...user,
+    settings: user.settings ? userSettingsSchema.parse(user.settings) : null,
+  };
 }
 
 /**
@@ -99,32 +112,11 @@ export async function getCurrentUser() {
         settings: true,
       },
     });
-    return updatedUser;
+    return {
+      ...updatedUser,
+      settings: userSettingsSchema.parse(updatedUser.settings),
+    };
   }
 
-  // Validate userSettings with Zod
-  const validatedSettings = userSettingsSchema.safeParse(user.settings);
-
-  if (!validatedSettings.success) {
-    // If settings are invalid, create new ones
-    const updatedUser = await db.user.update({
-      where: { id: user.id },
-      data: {
-        settings: {
-          create: {
-            currency: "USD",
-          },
-        },
-      },
-      include: {
-        settings: true,
-      },
-    });
-    return updatedUser;
-  }
-
-  return {
-    ...user,
-    settings: validatedSettings.data,
-  };
+  return user;
 }
