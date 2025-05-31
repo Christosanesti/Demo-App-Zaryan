@@ -1,14 +1,14 @@
 "use client";
-import React, { useState } from "react";
+import React from "react";
 import Logo, { LogoMobile } from "@/components/logo";
-import { usePathname } from "next/navigation";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Button, buttonVariants } from "./ui/button";
-import { UserButton } from "@clerk/nextjs";
-import { ThemeSwitcherBtn } from "./ThemeSwtitcherBtn";
-import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
-import { Menu } from "lucide-react";
+import { buttonVariants } from "./ui/button";
+import { UserButton, useUser } from "@clerk/nextjs";
+import { motion } from "framer-motion";
+import { useGSAP } from "@gsap/react";
+import { useRef } from "react";
+import gsap from "gsap";
+
 function Navbar() {
   return (
     <>
@@ -18,42 +18,48 @@ function Navbar() {
   );
 }
 
-const items = [
-  { label: "Dashboard", link: "/" },
-  { label: "Transactions", link: "/transactions" },
-  { label: "Manage", link: "/manage" },
-];
-
 function MobileNavbar() {
-  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+  const { user } = useUser();
+
+  useGSAP(() => {
+    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+
+    tl.from(".mobile-nav-content", {
+      y: -20,
+      opacity: 0,
+      duration: 0.5,
+    });
+  }, []);
+
   return (
-    <div className="block md:hidden border-separate bg-background">
+    <div className="block md:hidden border-separate backdrop-blur-sm border-b bg-gradient-to-r from-slate-900/95 to-slate-800/95 border-slate-700/50">
       <nav className="container flex items-center justify-between px-8">
-        <Sheet open={isOpen} onOpenChange={setIsOpen}>
-          <SheetTrigger>
-            <Button variant="ghost" size="icon">
-              <Menu />
-            </Button>
-          </SheetTrigger>
-          <SheetContent className="w-[400px] sm:w-[600px]" side="left">
-            <Logo />
-            <div className="flex flex-col gap-1 pt-4">
-              {items.map((item) => (
-                <NavbarItem
-                  key={item.label}
-                  label={item.label}
-                  link={item.link}
-                  clickCallback={() => setIsOpen((prev) => !prev)}
-                />
-              ))}
-            </div>
-          </SheetContent>
-        </Sheet>
         <div className="flex h-[80px] min-h-[60px] items-center gap-x-4">
-          <LogoMobile />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+            className="relative"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 blur-xl rounded-full" />
+            <LogoMobile />
+          </motion.div>
         </div>
-        <div className="flex items-center gap-2">
-          <ThemeSwitcherBtn />
+        <div className="flex items-center gap-4">
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="hidden sm:block"
+          >
+            <p className="text-sm text-slate-400">
+              Welcome back,{" "}
+              <span className="text-white font-medium">
+                {user?.firstName || "User"}
+              </span>
+            </p>
+          </motion.div>
           <UserButton afterSignOutUrl="/sign-in" />
         </div>
       </nav>
@@ -62,63 +68,49 @@ function MobileNavbar() {
 }
 
 function DesktopNavbar() {
+  const containerRef = useRef(null);
+  const { user } = useUser();
+
+  useGSAP(() => {
+    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+
+    tl.from(".desktop-nav-content", {
+      y: -20,
+      opacity: 0,
+      duration: 0.5,
+    });
+  }, []);
+
   return (
-    <div className="hidden w-full border-separate border-b bg-background md:block">
+    <div className="hidden w-full border-separate border-b backdrop-blur-sm md:block bg-gradient-to-r from-slate-900/95 to-slate-800/95 border-slate-700/50">
       <nav className="container flex items-center justify-between px-8">
-        <div className="flex h-[80px] min-h-[60px] w-full items-center gap-x-8">
-          <Logo />
-          <div className="flex h-full flex-1 items-center justify-center space-x-8">
-            {items.map((item) => (
-              <NavbarItem
-                key={item.label}
-                link={item.link}
-                label={item.label}
-              />
-            ))}
-          </div>
+        <div className="flex h-[80px] min-h-[60px] items-center gap-x-8">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+            className="relative"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 blur-xl rounded-full" />
+            <Logo />
+          </motion.div>
         </div>
         <div className="flex items-center gap-4">
-          <ThemeSwitcherBtn />
-          <div className="h-8 w-[1px] bg-border" />
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
+            <p className="text-sm text-slate-400">
+              Welcome back,{" "}
+              <span className="text-white font-medium">
+                {user?.firstName || "User"}
+              </span>
+            </p>
+          </motion.div>
           <UserButton afterSignOutUrl="/sign-in" />
         </div>
       </nav>
-    </div>
-  );
-}
-
-function NavbarItem({
-  label,
-  link,
-  clickCallback,
-}: {
-  label: string;
-  link: string;
-  clickCallback?: () => void;
-}) {
-  const pathName = usePathname();
-  const isActive = pathName === link;
-  return (
-    <div className="relative flex items-center">
-      <Link
-        href={link}
-        onClick={() => {
-          if (clickCallback) clickCallback();
-        }}
-        className={cn(
-          buttonVariants({
-            variant: "ghost",
-          }),
-          "relative px-6 py-2 text-base font-medium transition-colors duration-200",
-          "hover:text-foreground/80",
-          isActive ? "text-foreground" : "text-muted-foreground"
-        )}
-      >
-        {label}
-        {isActive && (
-          <div className="absolute -bottom-[1.5px] left-0 h-[2px] w-full rounded-full bg-primary transition-all duration-200" />
-        )}
-      </Link>
     </div>
   );
 }

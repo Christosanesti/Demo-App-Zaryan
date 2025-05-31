@@ -14,64 +14,172 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
-model UserSettings {
-  userId String @id
-  currency String
-  
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  daybookEntries DaybookEntry[]
+  stocks        Stock[]
+  customers     Customer[]
+  sales         Sale[]
+  installments  Installment[]
 }
 
-model Category {
-  createdAt DateTime @default(now())
-  name String
-  userId String
-  icon String
-  type String @default("income")
+model DaybookEntry {
+  id          String   @id @default(cuid())
+  date        DateTime
+  type        String   // "income" or "expense"
+  amount      Float
+  description String
+  reference   String   // Reference to ledger, bank, or customer
+  userId      String
+  userName    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  @@unique([userId, name, type])
+  // Relationships
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stockId     String?  @unique
+  stock       Stock?   @relation(fields: [stockId], references: [id])
+  saleId      String?  @unique
+  sale        Sale?    @relation(fields: [saleId], references: [id])
+  installmentId String? @unique
+  installment Installment? @relation(fields: [installmentId], references: [id])
+
+  @@index([userId])
+  @@index([reference])
+  @@index([date])
+  @@index([type])
 }
 
-model Transaction {
-  id String @id @default(uuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-  amount Float
+model Stock {
+  id          String   @id @default(cuid())
+  date        DateTime
+  productName String
+  amount      Float
+  quantity    Int
   description String?
-  date DateTime
-  userId String
-  type String @default("income")
+  userId      String
+  userName    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  category String
-  categoryIcon String
+  // Relationships
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  daybookEntry DaybookEntry?
+
+  @@index([userId])
+  @@index([date])
+  @@index([productName])
 }
 
-model MonthHistory {
-  userId String
-  day Int
-  month Int
-  year Int 
-
-  income Float
-  expense Float
-
-
-  @@id([day, month, year, userId])
-
-
+model Ledger {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // "income" or "expense"
+  balance     Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
-
-model YearHistory {
-  userId String
-  month Int
-  year Int 
-
-  income Float
-  expense Float
-
-
-  @@id([ month, year, userId])
-  
-    
+model Bank {
+  id            String   @id @default(cuid())
+  name          String
+  accountNumber String
+  balance       Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
+model Customer {
+  id            String   @id @default(cuid())
+  name          String
+  phone         String?
+  address       String?
+  photoUrl      String?
+  guarantorName String?
+  guarantorPhone String?
+  guarantorAddress String?
+  guarantorPhotoUrl String?
+  documentsUrl  String?
+  userId        String
+  userName      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relationships
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sales         Sale[]
+  installments  Installment[]
+
+  @@index([userId])
+  @@index([name])
+  @@index([phone])
+}
+
+model Sale {
+  id          String   @id @default(cuid())
+  date        DateTime
+  amount      Float
+  description String?
+  customerId  String
+  userId      String
+  userName    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  daybookEntry DaybookEntry?
+
+  @@index([customerId])
+  @@index([userId])
+  @@index([date])
+}
+
+model Installment {
+  id          String   @id @default(cuid())
+  date        DateTime
+  amount      Float
+  description String?
+  customerId  String
+  userId      String
+  userName    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  daybookEntry DaybookEntry?
+
+  @@index([customerId])
+  @@index([userId])
+  @@index([date])
+}
+
+model Purchase {
+  id            String   @id @default(cuid())
+  date          DateTime
+  amount        Float
+  description   String?
+  supplierId    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([date])
+}
+
+model Supplier {
+  id          String   @id @default(cuid())
+  name        String
+  email       String?  @unique
+  phone       String?
+  balance     Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
