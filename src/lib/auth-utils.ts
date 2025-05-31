@@ -1,6 +1,17 @@
-import { prisma } from "@/lib/prisma";
-import { currentUser } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { z } from "zod";
+
+const userSettingsSchema = z.object({
+  id: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  userId: z.string(),
+  currency: z.string(),
+});
+
+export type UserSettings = z.infer<typeof userSettingsSchema>;
 
 /**
  * Ensures the current user exists in the database and returns both Clerk user and DB user
@@ -8,88 +19,20 @@ import { redirect } from "next/navigation";
  * Returns only serializable data to prevent Next.js serialization errors
  */
 export async function getCurrentUserWithDB() {
-  const user = await currentUser();
+  const { userId } = auth();
 
-  if (!user) {
-    redirect("/sign-in");
+  if (!userId) {
+    return null;
   }
 
-  // Check if user exists in database
-  let dbUser = await prisma.user.findUnique({
-    where: {
-      id: user.id,
-    },
+  const user = await db.user.findUnique({
+    where: { id: userId },
     include: {
-      userSettings: true,
+      settings: true,
     },
   });
 
-  if (!dbUser) {
-    // Create the user in the database if they don't exist
-    dbUser = await prisma.user.create({
-      data: {
-        id: user.id,
-        email: user.emailAddresses[0]?.emailAddress || "",
-        name:
-          user.firstName ?
-            `${user.firstName} ${user.lastName || ""}`.trim()
-          : null,
-      },
-      include: {
-        userSettings: true,
-      },
-    });
-  }
-
-  // Ensure user settings exist
-  if (!dbUser.userSettings) {
-    await prisma.userSettings.create({
-      data: {
-        userId: user.id,
-        currency: "USD",
-      },
-    });
-
-    // Refetch user with settings
-    dbUser = await prisma.user.findUnique({
-      where: {
-        id: user.id,
-      },
-      include: {
-        userSettings: true,
-      },
-    });
-  }
-
-  // Return only serializable data
-  return {
-    clerkUser: {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      imageUrl: user.imageUrl,
-      emailAddresses: user.emailAddresses.map((email) => ({
-        emailAddress: email.emailAddress,
-        id: email.id,
-      })),
-      createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : null,
-      updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : null,
-    },
-    dbUser: {
-      id: dbUser!.id,
-      email: dbUser!.email,
-      name: dbUser!.name,
-      createdAt: dbUser!.createdAt.toISOString(),
-      updatedAt: dbUser!.updatedAt.toISOString(),
-    },
-    userSettings: {
-      id: dbUser!.userSettings!.id,
-      userId: dbUser!.userSettings!.userId,
-      currency: dbUser!.userSettings!.currency,
-      createdAt: dbUser!.userSettings!.createdAt.toISOString(),
-      updatedAt: dbUser!.userSettings!.updatedAt.toISOString(),
-    },
-  };
+  return user;
 }
 
 /**
@@ -97,53 +40,37 @@ export async function getCurrentUserWithDB() {
  * Returns only serializable data to prevent Next.js serialization errors
  */
 export async function ensureUserInDB() {
-  const user = await currentUser();
+  const { userId } = auth();
 
-  if (!user) {
+  if (!userId) {
     redirect("/sign-in");
   }
 
-  let dbUser = await prisma.user.findUnique({
-    where: {
-      id: user.id,
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    include: {
+      settings: true,
     },
   });
 
-  if (!dbUser) {
-    dbUser = await prisma.user.create({
+  if (!user) {
+    const newUser = await db.user.create({
       data: {
-        id: user.id,
-        email: user.emailAddresses[0]?.emailAddress || "",
-        name:
-          user.firstName ?
-            `${user.firstName} ${user.lastName || ""}`.trim()
-          : null,
+        id: userId,
+        settings: {
+          create: {
+            currency: "USD",
+          },
+        },
+      },
+      include: {
+        settings: true,
       },
     });
+    return newUser;
   }
 
-  // Return only serializable data
-  return {
-    clerkUser: {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      imageUrl: user.imageUrl,
-      emailAddresses: user.emailAddresses.map((email) => ({
-        emailAddress: email.emailAddress,
-        id: email.id,
-      })),
-      createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : null,
-      updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : null,
-    },
-    dbUser: {
-      id: dbUser.id,
-      email: dbUser.email,
-      name: dbUser.name,
-      createdAt: dbUser.createdAt.toISOString(),
-      updatedAt: dbUser.updatedAt.toISOString(),
-    },
-  };
+  return user;
 }
 
 /**
@@ -151,6 +78,53 @@ export async function ensureUserInDB() {
  * Returns null if not authenticated (doesn't redirect for API routes)
  */
 export async function getCurrentUser() {
-  const user = await currentUser();
-  return user;
+  const user = await ensureUserInDB();
+
+  if (!user) {
+    redirect("/sign-in");
+  }
+
+  // Ensure userSettings exists
+  if (!user.settings) {
+    const updatedUser = await db.user.update({
+      where: { id: user.id },
+      data: {
+        settings: {
+          create: {
+            currency: "USD",
+          },
+        },
+      },
+      include: {
+        settings: true,
+      },
+    });
+    return updatedUser;
+  }
+
+  // Validate userSettings with Zod
+  const validatedSettings = userSettingsSchema.safeParse(user.settings);
+
+  if (!validatedSettings.success) {
+    // If settings are invalid, create new ones
+    const updatedUser = await db.user.update({
+      where: { id: user.id },
+      data: {
+        settings: {
+          create: {
+            currency: "USD",
+          },
+        },
+      },
+      include: {
+        settings: true,
+      },
+    });
+    return updatedUser;
+  }
+
+  return {
+    ...user,
+    settings: validatedSettings.data,
+  };
 }
