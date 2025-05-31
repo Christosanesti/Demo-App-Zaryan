@@ -2,7 +2,11 @@ import { getCurrentUserWithDB } from "@/lib/auth-utils";
 import LedgersClient from "./_components/LedgersClient";
 
 export default async function LedgersPage() {
-  const { userSettings } = await getCurrentUserWithDB();
+  const user = await getCurrentUserWithDB();
 
-  return <LedgersClient userSettings={userSettings} />;
+  if (!user) {
+    return null;
+  }
+
+  return <LedgersClient userSettings={user.settings} />;
 }
