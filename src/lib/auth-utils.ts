@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs";
+import { currentUser } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { z } from "zod";
@@ -19,26 +19,27 @@ export type UserSettings = z.infer<typeof userSettingsSchema>;
  * Returns only serializable data to prevent Next.js serialization errors
  */
 export async function getCurrentUserWithDB() {
-  const { userId } = auth();
-
-  if (!userId) {
-    return null;
-  }
-
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    include: {
-      settings: true,
-    },
-  });
+  const user = await currentUser();
 
   if (!user) {
     return null;
   }
 
+  const dbUser = await db.user.findUnique({
+    where: { id: user.id },
+    include: {
+      settings: true,
+    },
+  });
+
+  if (!dbUser) {
+    return null;
+  }
+
   return {
-    ...user,
-    settings: user.settings ? userSettingsSchema.parse(user.settings) : null,
+    ...dbUser,
+    settings:
+      dbUser.settings ? userSettingsSchema.parse(dbUser.settings) : null,
   };
 }
 
@@ -47,23 +48,23 @@ export async function getCurrentUserWithDB() {
  * Returns only serializable data to prevent Next.js serialization errors
  */
 export async function ensureUserInDB() {
-  const { userId } = auth();
+  const user = await currentUser();
 
-  if (!userId) {
+  if (!user) {
     redirect("/sign-in");
   }
 
-  const user = await db.user.findUnique({
-    where: { id: userId },
+  const dbUser = await db.user.findUnique({
+    where: { id: user.id },
     include: {
       settings: true,
     },
   });
 
-  if (!user) {
+  if (!dbUser) {
     const newUser = await db.user.create({
       data: {
-        id: userId,
+        id: user.id,
         settings: {
           create: {
             currency: "USD",
@@ -81,8 +82,9 @@ export async function ensureUserInDB() {
   }
 
   return {
-    ...user,
-    settings: user.settings ? userSettingsSchema.parse(user.settings) : null,
+    ...dbUser,
+    settings:
+      dbUser.settings ? userSettingsSchema.parse(dbUser.settings) : null,
   };
 }
 
