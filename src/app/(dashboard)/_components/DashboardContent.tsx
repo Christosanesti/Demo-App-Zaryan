@@ -51,15 +51,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const DEFAULT_CURRENCY = "USD";
 
-interface DashboardClientProps {
+interface DashboardContentProps {
   user: User;
 }
 
-export default function DashboardClient({ user }: DashboardClientProps) {
+export default function DashboardContent({ user }: DashboardContentProps) {
   const containerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [selectedPeriod, setSelectedPeriod] = useState("30d");
+
+  // Mock userSettings for now to fix build issue
+  const mockUserSettings = {
+    id: "mock-id",
+    userId: user.id,
+    currency: "USD",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 
   // Fetch dashboard data
   useEffect(() => {
@@ -414,7 +423,7 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                 </div>
               </CardHeader>
               <CardContent className="relative">
-                <OverView />
+                <OverView userSettings={mockUserSettings} />
               </CardContent>
             </Card>
 

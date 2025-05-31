@@ -25,12 +25,11 @@ import { Badge } from "@/components/ui/badge";
 import CustomerClient from "./customers/_components/CustomerClient";
 import StaffClient from "./staff/_components/StaffClient";
 import { motion } from "framer-motion";
-import { useGSAP } from "@gsap/react";
-import { useRef, useState, useEffect } from "react";
-import gsap from "gsap";
+import { useRef } from "react";
 import { toast } from "sonner";
-import { useAuth, useUser } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
+import { redirect } from "next/navigation";
+import { DashboardSkeleton } from "@/components/ui/skeleton-wrapper";
 
 const DEFAULT_CURRENCY = "USD";
 
@@ -79,93 +78,14 @@ const statsData = [
 
 export default function DashboardPage() {
   const containerRef = useRef(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const { isLoaded, isSignedIn, user } = useAuth();
-  const router = useRouter();
+  const { user, isLoaded } = useUser();
 
-  // Authentication check
-  useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.push("/sign-in");
-      return;
-    }
-  }, [isLoaded, isSignedIn, router]);
+  if (!isLoaded) {
+    return <DashboardSkeleton />;
+  }
 
-  useGSAP(() => {
-    // Only run animations if user is authenticated
-    if (!isLoaded || !isSignedIn) return;
-
-    const tl = gsap.timeline({
-      defaults: { ease: "power3.out" },
-      onComplete: () => setIsLoading(false), // Set loading to false when animations complete
-    });
-
-    tl.from(".welcome-header", {
-      y: -50,
-      opacity: 0,
-      duration: 0.8,
-    })
-      .from(
-        ".stat-card",
-        {
-          y: 30,
-          opacity: 0,
-          duration: 0.5,
-          stagger: 0.1,
-        },
-        "-=0.4"
-      )
-      .from(
-        ".quick-actions",
-        {
-          scale: 0.95,
-          opacity: 0,
-          duration: 0.5,
-        },
-        "-=0.2"
-      );
-  }, [isLoaded, isSignedIn]);
-
-  // Show loading state during auth check or initial animations
-  if (!isLoaded || !isSignedIn || isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        <div className="container mx-auto px-4 py-8 space-y-8">
-          {/* Header skeleton */}
-          <div className="space-y-4">
-            <div className="h-8 w-64 bg-slate-700/50 rounded animate-pulse" />
-            <div className="h-4 w-96 bg-slate-700/30 rounded animate-pulse" />
-          </div>
-
-          {/* Stats cards skeleton */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-6"
-              >
-                <div className="space-y-3">
-                  <div className="h-6 w-16 bg-slate-700/50 rounded animate-pulse" />
-                  <div className="h-8 w-24 bg-slate-700/50 rounded animate-pulse" />
-                  <div className="h-4 w-20 bg-slate-700/30 rounded animate-pulse" />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Quick actions skeleton */}
-          <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-6">
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <div className="h-6 w-32 bg-slate-700/50 rounded animate-pulse" />
-                <div className="h-4 w-64 bg-slate-700/30 rounded animate-pulse" />
-              </div>
-              <div className="h-96 w-full bg-slate-700/20 rounded animate-pulse" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  if (!user) {
+    redirect("/sign-in");
   }
 
   return (

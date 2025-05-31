@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ensureUserInDB } from "@/lib/auth-utils";
-import { db } from "../../../lib/db";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
 const createSaleSchema = z.object({
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     const validatedData = createSaleSchema.parse(body);
 
     // Start a transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       // Create the sale
       const sale = await tx.sale.create({
         data: {
@@ -126,7 +126,7 @@ export async function GET(req: Request) {
       ...(status && { status }),
     };
 
-    const sales = await db.sale.findMany({
+    const sales = await prisma.sale.findMany({
       where,
       include: {
         customer: true,
@@ -156,7 +156,7 @@ export async function PATCH(req: Request) {
       return new NextResponse("ID is required", { status: 400 });
     }
 
-    const sale = await db.sale.update({
+    const sale = await prisma.sale.update({
       where: {
         id,
         userId: user.id,
@@ -185,7 +185,7 @@ export async function DELETE(req: Request) {
       return new NextResponse("ID is required", { status: 400 });
     }
 
-    await db.sale.delete({
+    await prisma.sale.delete({
       where: {
         id,
         userId: user.id,

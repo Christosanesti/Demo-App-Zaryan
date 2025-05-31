@@ -1,9 +1,7 @@
 "use client";
-import React, { useRef } from "react";
+import React from "react";
 import { motion } from "framer-motion";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { UserButton } from "@clerk/nextjs";
+import { UserButtonWrapper } from "@/components/auth/UserButtonWrapper";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,50 +35,44 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      duration: 0.5,
+      ease: "easeOut",
+    },
+  },
+};
+
 export default function DashboardPage() {
-  const containerRef = useRef(null);
-
-  useGSAP(() => {
-    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-
-    tl.from(".dashboard-header", {
-      y: -50,
-      opacity: 0,
-      duration: 0.8,
-    })
-      .from(".stat-card", {
-        y: 30,
-        opacity: 0,
-        duration: 0.5,
-        stagger: 0.1,
-      })
-      .from(".chart-container", {
-        scale: 0.95,
-        opacity: 0,
-        duration: 0.5,
-      })
-      .from(".recent-activity", {
-        x: 30,
-        opacity: 0,
-        duration: 0.5,
-      });
-  }, []);
-
   const handleCreate = (type: string) => {
     toast.success(`${type} created successfully!`);
   };
 
   return (
-    <div
-      ref={containerRef}
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
       className="min-h-screen mx-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-6"
     >
       {/* Header Section */}
       <motion.div
         className="dashboard-header flex justify-between items-center mb-8"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        variants={itemVariants}
       >
         <div>
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-slate-300 to-blue-500 bg-clip-text text-transparent">
@@ -88,13 +80,14 @@ export default function DashboardPage() {
           </h1>
           <p className="text-slate-400 mt-2">Welcome back to your dashboard</p>
         </div>
-        <UserButton afterSignOutUrl="/" />
+        <UserButtonWrapper />
       </motion.div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <motion.div
           className="stat-card"
+          variants={itemVariants}
           whileHover={{ scale: 1.02 }}
           transition={{ type: "spring", stiffness: 300 }}
         >
@@ -116,6 +109,7 @@ export default function DashboardPage() {
 
         <motion.div
           className="stat-card"
+          variants={itemVariants}
           whileHover={{ scale: 1.02 }}
           transition={{ type: "spring", stiffness: 300 }}
         >
@@ -137,6 +131,7 @@ export default function DashboardPage() {
 
         <motion.div
           className="stat-card"
+          variants={itemVariants}
           whileHover={{ scale: 1.02 }}
           transition={{ type: "spring", stiffness: 300 }}
         >
@@ -158,6 +153,7 @@ export default function DashboardPage() {
 
         <motion.div
           className="stat-card"
+          variants={itemVariants}
           whileHover={{ scale: 1.02 }}
           transition={{ type: "spring", stiffness: 300 }}
         >
@@ -183,6 +179,7 @@ export default function DashboardPage() {
         {/* Chart Section */}
         <motion.div
           className="chart-container lg:col-span-2"
+          variants={itemVariants}
           whileHover={{ scale: 1.01 }}
           transition={{ type: "spring", stiffness: 300 }}
         >
@@ -201,6 +198,7 @@ export default function DashboardPage() {
         {/* Recent Activity */}
         <motion.div
           className="recent-activity"
+          variants={itemVariants}
           whileHover={{ scale: 1.01 }}
           transition={{ type: "spring", stiffness: 300 }}
         >
@@ -217,6 +215,9 @@ export default function DashboardPage() {
                     key={item}
                     className="flex items-center space-x-4 p-3 rounded-lg bg-slate-700/30 hover:bg-slate-700/50 transition-colors duration-300"
                     whileHover={{ x: 5 }}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: item * 0.1 }}
                   >
                     <div className="h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center">
                       <Users className="h-5 w-5 text-blue-400" />
@@ -244,10 +245,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
         <Dialog>
           <DialogTrigger asChild>
-            <motion.div whileHover={{ scale: 1.02 }} className="action-card">
+            <motion.div
+              variants={itemVariants}
+              whileHover={{ scale: 1.02 }}
+              className="action-card"
+            >
               <Card className="bg-slate-800/50 border-slate-700/50 cursor-pointer hover:border-blue-500/50 transition-all duration-300">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-slate-400">
@@ -326,7 +331,11 @@ export default function DashboardPage() {
 
         <Dialog>
           <DialogTrigger asChild>
-            <motion.div whileHover={{ scale: 1.02 }} className="action-card">
+            <motion.div
+              variants={itemVariants}
+              whileHover={{ scale: 1.02 }}
+              className="action-card"
+            >
               <Card className="bg-slate-800/50 border-slate-700/50 cursor-pointer hover:border-blue-500/50 transition-all duration-300">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-slate-400">
@@ -401,7 +410,11 @@ export default function DashboardPage() {
 
         <Dialog>
           <DialogTrigger asChild>
-            <motion.div whileHover={{ scale: 1.02 }} className="action-card">
+            <motion.div
+              variants={itemVariants}
+              whileHover={{ scale: 1.02 }}
+              className="action-card"
+            >
               <Card className="bg-slate-800/50 border-slate-700/50 cursor-pointer hover:border-blue-500/50 transition-all duration-300">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-slate-400">
@@ -479,7 +492,11 @@ export default function DashboardPage() {
 
         <Dialog>
           <DialogTrigger asChild>
-            <motion.div whileHover={{ scale: 1.02 }} className="action-card">
+            <motion.div
+              variants={itemVariants}
+              whileHover={{ scale: 1.02 }}
+              className="action-card"
+            >
               <Card className="bg-slate-800/50 border-slate-700/50 cursor-pointer hover:border-blue-500/50 transition-all duration-300">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-slate-400">
@@ -552,6 +569,6 @@ export default function DashboardPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </motion.div>
   );
 }
