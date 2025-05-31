@@ -40,6 +40,18 @@ export async function getCurrentUserWithDB() {
     ...dbUser,
     settings:
       dbUser.settings ? userSettingsSchema.parse(dbUser.settings) : null,
+    clerkUser: {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      imageUrl: user.imageUrl,
+      emailAddresses: user.emailAddresses.map((email) => ({
+        emailAddress: email.emailAddress,
+        id: email.id,
+      })),
+      createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : null,
+      updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : null,
+    },
   };
 }
 
