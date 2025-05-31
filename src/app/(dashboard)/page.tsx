@@ -26,9 +26,11 @@ import CustomerClient from "./customers/_components/CustomerClient";
 import StaffClient from "./staff/_components/StaffClient";
 import { motion } from "framer-motion";
 import { useGSAP } from "@gsap/react";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import gsap from "gsap";
 import { toast } from "sonner";
+import { useAuth, useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
 const DEFAULT_CURRENCY = "USD";
 
@@ -78,8 +80,22 @@ const statsData = [
 export default function DashboardPage() {
   const containerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const router = useRouter();
+
+  // Authentication check
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.push("/sign-in");
+      return;
+    }
+  }, [isLoaded, isSignedIn, router]);
 
   useGSAP(() => {
+    // Only run animations if user is authenticated
+    if (!isLoaded || !isSignedIn) return;
+
     const tl = gsap.timeline({
       defaults: { ease: "power3.out" },
       onComplete: () => setIsLoading(false), // Set loading to false when animations complete
@@ -109,10 +125,10 @@ export default function DashboardPage() {
         },
         "-=0.2"
       );
-  }, []);
+  }, [isLoaded, isSignedIn]);
 
-  // Show loading state during initial animations
-  if (isLoading) {
+  // Show loading state during auth check or initial animations
+  if (!isLoaded || !isSignedIn || isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
         <div className="container mx-auto px-4 py-8 space-y-8">
