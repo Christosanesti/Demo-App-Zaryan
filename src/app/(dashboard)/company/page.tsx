@@ -2,7 +2,11 @@ import { getCurrentUserWithDB } from "@/lib/auth-utils";
 import CompanyClient from "./_components/CompanyClient";
 
 export default async function CompanyPage() {
-  const { userSettings } = await getCurrentUserWithDB();
+  const user = await getCurrentUserWithDB();
 
-  return <CompanyClient userSettings={userSettings} />;
+  if (!user) {
+    return null;
+  }
+
+  return <CompanyClient userSettings={user.settings} />;
 }

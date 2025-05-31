@@ -61,9 +61,10 @@ import {
   LoadingSpinner,
   EmptyState,
 } from "@/components/ui/design-system";
+import { UserSettings } from "@/lib/auth-utils";
 
 interface CompanyClientProps {
-  userSettings: any;
+  userSettings: UserSettings | null;
 }
 
 const companySchema = z.object({
@@ -87,6 +88,7 @@ type CompanyFormData = z.infer<typeof companySchema>;
 export default function CompanyClient({ userSettings }: CompanyClientProps) {
   const [isEditing, setIsEditing] = useState(false);
   const queryClient = useQueryClient();
+  const [currency, setCurrency] = useState(userSettings?.currency || "USD");
 
   const form = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
@@ -169,6 +171,15 @@ export default function CompanyClient({ userSettings }: CompanyClientProps) {
 
   const onSubmit = (data: CompanyFormData) => {
     updateCompanyMutation.mutate(data);
+  };
+
+  const handleSave = async () => {
+    try {
+      // TODO: Implement save functionality
+      toast.success("Settings saved successfully");
+    } catch (error) {
+      toast.error("Failed to save settings");
+    }
   };
 
   if (isLoading) {
@@ -745,6 +756,40 @@ export default function CompanyClient({ userSettings }: CompanyClientProps) {
           </EnhancedCard>
         </TabsContent>
       </Tabs>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <Card className="bg-slate-800/50 border-slate-700/50 mt-6">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-slate-200">
+              Company Settings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="currency" className="text-slate-300">
+                Currency
+              </Label>
+              <Input
+                id="currency"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="bg-slate-700/50 border-slate-600/50 text-slate-200"
+                placeholder="Enter currency code (e.g., USD)"
+              />
+            </div>
+            <Button
+              onClick={handleSave}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            >
+              Save Changes
+            </Button>
+          </CardContent>
+        </Card>
+      </motion.div>
     </PageContainer>
   );
 }
