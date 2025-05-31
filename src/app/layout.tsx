@@ -26,29 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider
-      publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-      domain={process.env.NEXT_PUBLIC_CLERK_DOMAIN}
-      signInFallbackRedirectUrl="/"
-      signUpFallbackRedirectUrl="/"
-      signInUrl="/sign-in"
-      signUpUrl="/sign-up"
-      appearance={{
-        variables: {
-          colorPrimary: "#3b82f6",
-          colorBackground: "#1e293b",
-          colorText: "#e2e8f0",
-          colorInputBackground: "#334155",
-          colorInputText: "#e2e8f0",
-        },
-      }}
-      sessionOptions={{
-        sessionTokenName: "__session",
-        clockSkewInMs: 60 * 1000, // 1 minute
-        touchSession: true,
-        tokenNotBeforeLeeway: 60,
-      }}
-    >
+    <ClerkProvider>
       <html
         lang="en"
         className="dark"
