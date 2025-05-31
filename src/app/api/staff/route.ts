@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
-import { db } from "@/lib/db";
+import prisma from "@/lib/prisma";
 import { z } from "zod";
 
 const createStaffSchema = z.object({
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const validatedData = createStaffSchema.parse(body);
 
-    const staff = await db.staff.create({
+    const staff = await prisma.staff.create({
       data: {
         ...validatedData,
         userId: user.id,
@@ -47,8 +47,8 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) {
+    const user = await currentUser();
+    if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -58,19 +58,19 @@ export async function GET(req: Request) {
     const search = searchParams.get("search");
 
     const where = {
-      userId,
+      userId: user.id,
       ...(department && { department }),
       ...(status && { status }),
       ...(search && {
         OR: [
-          { name: { contains: search, mode: "insensitive" } },
-          { email: { contains: search, mode: "insensitive" } },
-          { phone: { contains: search, mode: "insensitive" } },
+          { name: { contains: search, mode: "insensitive" as const } },
+          { email: { contains: search, mode: "insensitive" as const } },
+          { phone: { contains: search, mode: "insensitive" as const } },
         ],
       }),
     };
 
-    const staff = await db.staff.findMany({
+    const staff = await prisma.staff.findMany({
       where,
       orderBy: {
         name: "asc",
@@ -86,8 +86,8 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) {
+    const user = await currentUser();
+    if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -98,10 +98,10 @@ export async function PATCH(req: Request) {
       return new NextResponse("ID is required", { status: 400 });
     }
 
-    const staff = await db.staff.update({
+    const staff = await prisma.staff.update({
       where: {
         id,
-        userId,
+        userId: user.id,
       },
       data: {
         ...data,
@@ -118,8 +118,8 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) {
+    const user = await currentUser();
+    if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -130,10 +130,10 @@ export async function DELETE(req: Request) {
       return new NextResponse("ID is required", { status: 400 });
     }
 
-    await db.staff.delete({
+    await prisma.staff.delete({
       where: {
         id,
-        userId,
+        userId: user.id,
       },
     });
 

@@ -1,4 +1,4 @@
-import { dataTagErrorSymbol } from "@tanstack/react-query";
+// import { dataTagErrorSymbol } from '@tanstack/react-query'
 import { currencies } from "./Currencies";
 
 export function DateToUTCDate(date: Date) {

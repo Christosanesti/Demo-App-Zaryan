@@ -1,25 +1,24 @@
-import { prisma } from "@/lib/prisma";
-import { currentUser } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
+import { currentUser } from "@clerk/nextjs/server";
 import CustomerClient from "./_components/CustomerClient";
+import prisma from "@/lib/prisma";
 
-const CustomersPage = async () => {
+export const dynamic = "force-dynamic";
+
+export default async function CustomersPage() {
   const user = await currentUser();
 
   if (!user) {
     redirect("/sign-in");
   }
 
-  // Get user settings for currency formatting
-  const userSettings = await prisma.userSettings.findUnique({
-    where: {
-      userId: user.id,
-    },
+  // Fetch or create user settings
+  let userSettings = await prisma.userSettings.findUnique({
+    where: { userId: user.id },
   });
 
   if (!userSettings) {
-    // Create default settings if none exist
-    await prisma.userSettings.create({
+    userSettings = await prisma.userSettings.create({
       data: {
         userId: user.id,
         currency: "USD",
@@ -27,7 +26,9 @@ const CustomersPage = async () => {
     });
   }
 
-  return <CustomerClient userSettings={userSettings} />;
-};
-
-export default CustomersPage;
+  return (
+    <div className="container mx-auto py-10">
+      <CustomerClient userSettings={userSettings} />
+    </div>
+  );
+}

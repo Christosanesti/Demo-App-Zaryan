@@ -1,3 +1,5 @@
+"use client";
+
 import { format } from "date-fns";
 import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import { useStock } from "@/hooks/use-stock";

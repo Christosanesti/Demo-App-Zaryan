@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { z } from "zod";
-import { prisma } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
+import { z } from "zod";
+import { ensureUserInDB } from "@/lib/auth-utils";
+import prisma from "@/lib/prisma";
 
 const entrySchema = z.object({
-  date: z.string(),
+  date: z.string().transform((str) => new Date(str)),
   type: z.enum(["income", "expense"]),
-  amount: z.number().positive(),
-  description: z.string().min(1),
-  reference: z.string().min(1),
+  amount: z.number().positive("Amount must be greater than 0"),
+  description: z.string().min(1, "Description is required"),
+  reference: z.string().min(1, "Reference is required"),
+  category: z.string().optional(),
+  paymentMethod: z.enum(["cash", "bank", "mobile"]).optional(),
+  status: z.enum(["completed", "pending", "cancelled"]).optional(),
+  attachments: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 const updateEntrySchema = entrySchema.partial();
@@ -18,7 +23,6 @@ const updateEntrySchema = entrySchema.partial();
 export async function GET() {
   try {
     const user = await currentUser();
-
     if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
@@ -43,87 +47,68 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const user = await currentUser();
-
     if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const body = await req.json();
-    const validatedData = entrySchema.parse(body);
+    console.log("Received request body:", body);
+
+    const validationResult = entrySchema.safeParse(body);
+
+    if (!validationResult.success) {
+      console.error("Validation error:", validationResult.error);
+      return new NextResponse(
+        JSON.stringify({
+          message: "Validation error",
+          errors: validationResult.error.errors,
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const validatedData = validationResult.data;
+    console.log("Validated data:", validatedData);
 
     const entry = await prisma.daybookEntry.create({
       data: {
         ...validatedData,
         userId: user.id,
-        userName: user.firstName || "User",
+        userName:
+          user.firstName || user.emailAddresses[0]?.emailAddress || "User",
       },
     });
 
+    console.log("Created entry:", entry);
     return NextResponse.json(entry);
   } catch (error) {
+    console.error("[DAYBOOK_POST] Error:", error);
+
     if (error instanceof z.ZodError) {
-      return new NextResponse("Invalid request data", { status: 400 });
+      return new NextResponse(
+        JSON.stringify({
+          message: "Validation error",
+          details: error.errors,
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
 
-    console.error("[DAYBOOK_POST]", error);
-    return new NextResponse("Internal Error", { status: 500 });
-  }
-}
-
-// PATCH /api/daybook/:id
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    const body = await req.json();
-    const validatedData = updateEntrySchema.parse(body);
-
-    const entry = await prisma.daybookEntry.update({
-      where: {
-        id: params.id,
-        userId: user.id,
-      },
-      data: validatedData,
-    });
-
-    return NextResponse.json(entry);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return new NextResponse("Invalid request data", { status: 400 });
-    }
-
-    console.error("[DAYBOOK_PATCH]", error);
-    return new NextResponse("Internal Error", { status: 500 });
-  }
-}
-
-// DELETE /api/daybook/:id
-export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    await prisma.daybookEntry.delete({
-      where: {
-        id: params.id,
-        userId: user.id,
-      },
-    });
-
-    return new NextResponse(null, { status: 204 });
-  } catch (error) {
-    console.error("[DAYBOOK_DELETE]", error);
-    return new NextResponse("Internal Error", { status: 500 });
+    return new NextResponse(
+      JSON.stringify({
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 }

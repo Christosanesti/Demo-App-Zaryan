@@ -1,31 +1,47 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useMemo } from "react";
 
-interface InventoryItem {
+type CreateInventoryData = {
+  name: string;
+  category?: string;
+  sku?: string;
+  quantity: number;
+  price: number;
+  costPrice?: number;
+  description?: string;
+  supplier?: string;
+  location?: string;
+  minStockLevel?: number;
+  unit?: string;
+  tags?: string[];
+  barcode?: string;
+  expiryDate?: Date;
+  brand?: string;
+  model?: string;
+  color?: string;
+  size?: string;
+  weight?: number;
+  dimensions?: string;
+  material?: string;
+  condition?: "new" | "used" | "refurbished";
+  warrantyPeriod?: number;
+  images?: string[];
+};
+
+export interface InventoryItem {
   id: string;
-  userId: string;
   name: string;
   description?: string;
   quantity: number;
-  unit: string;
   price: number;
-  category: string;
-  status: "in_stock" | "low_stock" | "out_of_stock";
+  costPrice?: number;
+  sellingPrice?: number;
+  category?: string;
+  userId: string;
+  userName: string;
   createdAt: Date;
   updatedAt: Date;
-}
-
-interface CreateInventoryData {
-  name: string;
-  description?: string;
-  quantity: number;
-  unitPrice: number;
-  category: string;
-  supplier?: string;
-  reorderLevel?: number;
-  location?: string;
-  sku?: string;
-  barcode?: string;
 }
 
 interface UpdateInventoryData extends Partial<CreateInventoryData> {
@@ -43,6 +59,23 @@ export const useInventory = () => {
       return response.json();
     },
   });
+
+  // Calculate summary based on inventory
+  const summary = useMemo(() => {
+    if (!inventory) {
+      return { totalValue: 0, lowStockCount: 0 };
+    }
+
+    const totalValue = inventory.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+    const lowStockCount = inventory.filter(
+      (item) => item.quantity <= 10
+    ).length;
+
+    return { totalValue, lowStockCount };
+  }, [inventory]);
 
   const { mutate: createItem, isPending: isCreating } = useMutation({
     mutationFn: async (
@@ -88,6 +121,8 @@ export const useInventory = () => {
   });
 
   return {
+    items: inventory,
+    summary,
     inventory,
     isLoading,
     createItem,

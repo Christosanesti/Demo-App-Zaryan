@@ -33,7 +33,6 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { CalendarIcon, Plus } from "lucide-react";
 import { useLedgers } from "@/hooks/use-ledgers";
-import { useAuth } from "@clerk/nextjs";
 
 const formSchema = z.object({
   date: z.date(),
@@ -56,7 +55,6 @@ interface DaybookFormProps {
 export function DaybookForm({ onSuccess, onError }: DaybookFormProps) {
   const { createEntry, isCreating } = useDaybook();
   const { ledgers, isLoading: isLoadingLedgers } = useLedgers();
-  const { userId } = useAuth();
   const [showCustomLedger, setShowCustomLedger] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -77,10 +75,14 @@ export function DaybookForm({ onSuccess, onError }: DaybookFormProps) {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      await createEntry({
+      const submissionData = {
         ...values,
         date: values.date,
-      });
+        // Convert attachments string to array if it exists
+        attachments: values.attachments ? [values.attachments] : undefined,
+      };
+
+      await createEntry(submissionData);
       form.reset();
       onSuccess?.();
     } catch (error) {

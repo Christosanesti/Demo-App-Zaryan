@@ -1,7 +1,7 @@
 import { currentUser } from "@clerk/nextjs/server";
+import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { OverviewQuerySchema } from "../../../../../schema/overview";
-import { prisma } from "@/lib/prisma";
+import { z } from "zod";
 
 export async function GET(request: Request) {
   const user = await currentUser();
@@ -10,23 +10,29 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  const queryParams = OverviewQuerySchema.safeParse({
+  const querySchema = z.object({
+    from: z.coerce.date(),
+    to: z.coerce.date(),
+  });
+
+  const queryValidation = querySchema.safeParse({
     from,
     to,
   });
 
-  if (!queryParams.success) {
-    throw new Error(queryParams.error.message);
+  if (!queryValidation.success) {
+    return Response.json(queryValidation.error.message, {
+      status: 400,
+    });
   }
 
   const stats = await getCategoriesStats(
     user.id,
-    queryParams.data.from,
-    queryParams.data.to
+    queryValidation.data.from,
+    queryValidation.data.to
   );
   return Response.json(stats);
 }
@@ -36,8 +42,8 @@ export type GetCategoriesStatsResponse = Awaited<
 >;
 
 async function getCategoriesStats(userId: string, from: Date, to: Date) {
-  // First, get all transactions for the period
-  const transactions = await prisma.transaction.findMany({
+  // Get all daybook entries for the period
+  const entries = await prisma.daybookEntry.findMany({
     where: {
       userId,
       date: {
@@ -52,18 +58,19 @@ async function getCategoriesStats(userId: string, from: Date, to: Date) {
     },
   });
 
-  // Group transactions by type and category
-  const groupedStats = transactions.reduce(
-    (acc, transaction) => {
-      const key = `${transaction.type}-${transaction.category}`;
+  // Group entries by type and category
+  const groupedStats = entries.reduce(
+    (acc, entry) => {
+      const category = entry.category || "Uncategorized";
+      const key = `${entry.type}-${category}`;
       if (!acc[key]) {
         acc[key] = {
-          type: transaction.type,
-          category: transaction.category,
+          type: entry.type,
+          category: category,
           amount: 0,
         };
       }
-      acc[key].amount += transaction.amount;
+      acc[key].amount += entry.amount;
       return acc;
     },
     {} as Record<string, { type: string; category: string; amount: number }>

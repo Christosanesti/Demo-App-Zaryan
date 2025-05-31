@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
+import { ensureUserInDB } from "@/lib/auth-utils";
 import { db } from "../../../lib/db";
 import { z } from "zod";
 
@@ -8,16 +8,13 @@ const createSaleSchema = z.object({
   inventoryId: z.string().min(1),
   amount: z.number().positive(),
   advancePayment: z.number().min(0),
-  paymentMode: z.enum(["cash", "bank"]),
+  paymentMode: z.enum(["CASH", "BANK", "MOBILE"]),
   installmentMonths: z.number().int().min(1),
 });
 
 export async function POST(req: Request) {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
 
     const body = await req.json();
     const validatedData = createSaleSchema.parse(body);
@@ -27,9 +24,16 @@ export async function POST(req: Request) {
       // Create the sale
       const sale = await tx.sale.create({
         data: {
-          ...validatedData,
+          customerId: validatedData.customerId,
+          amount: validatedData.amount,
+          paymentMode: validatedData.paymentMode,
+          installmentMonths: validatedData.installmentMonths,
+          advance: validatedData.advancePayment,
           userId: user.id,
-          status: "active",
+          userName:
+            user.firstName || user.emailAddresses[0]?.emailAddress || "Unknown",
+          date: new Date(),
+          itemId: validatedData.inventoryId,
         },
       });
 
@@ -49,9 +53,16 @@ export async function POST(req: Request) {
           tx.installment.create({
             data: {
               saleId: sale.id,
+              customerId: validatedData.customerId,
+              userId: user.id,
+              userName:
+                user.firstName ||
+                user.emailAddresses[0]?.emailAddress ||
+                "Unknown",
               amount: installmentAmount,
               dueDate,
-              status: "pending",
+              date: new Date(),
+              description: `Installment ${i + 1} for sale #${sale.id}`,
             },
           })
         );
@@ -62,6 +73,10 @@ export async function POST(req: Request) {
         await tx.daybookEntry.create({
           data: {
             userId: user.id,
+            userName:
+              user.firstName ||
+              user.emailAddresses[0]?.emailAddress ||
+              "Unknown",
             date: new Date(),
             amount: validatedData.advancePayment,
             type: "income",
@@ -99,10 +114,7 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
 
     const { searchParams } = new URL(req.url);
     const customerId = searchParams.get("customerId");
@@ -118,7 +130,7 @@ export async function GET(req: Request) {
       where,
       include: {
         customer: true,
-        inventory: true,
+        item: true,
         installments: true,
       },
       orderBy: {
@@ -135,10 +147,7 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
 
     const body = await req.json();
     const { id, ...data } = body;
@@ -167,10 +176,7 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");

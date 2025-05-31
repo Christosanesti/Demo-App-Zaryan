@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
+import { ensureUserInDB } from "@/lib/auth-utils";
 import { db } from "../../../lib/db";
 import { z } from "zod";
 
@@ -13,10 +13,7 @@ const updateInstallmentSchema = z.object({
 
 export async function GET(req: Request) {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
 
     const { searchParams } = new URL(req.url);
     const saleId = searchParams.get("saleId");
@@ -28,7 +25,12 @@ export async function GET(req: Request) {
         userId: user.id,
         ...(saleId && { id: saleId }),
       },
-      ...(status && { status }),
+      ...(status && {
+        paid:
+          status === "paid" ? true
+          : status === "pending" ? false
+          : undefined,
+      }),
       ...(dueDate && { dueDate: new Date(dueDate) }),
     };
 
@@ -38,7 +40,7 @@ export async function GET(req: Request) {
         sale: {
           include: {
             customer: true,
-            inventory: true,
+            item: true,
           },
         },
       },
@@ -56,10 +58,7 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
 
     const body = await req.json();
     const validatedData = updateInstallmentSchema.parse(body);
@@ -75,10 +74,14 @@ export async function PATCH(req: Request) {
           },
         },
         data: {
-          status: validatedData.status,
-          paymentDate: validatedData.paymentDate,
-          paymentMethod: validatedData.paymentMethod,
-          notes: validatedData.notes,
+          paid: validatedData.status === "paid",
+          paidAt:
+            validatedData.status === "paid" ? validatedData.paymentDate : null,
+          paymentMode:
+            validatedData.paymentMethod ?
+              (validatedData.paymentMethod.toUpperCase() as "CASH" | "BANK")
+            : null,
+          description: validatedData.notes,
         },
         include: {
           sale: true,
@@ -86,17 +89,25 @@ export async function PATCH(req: Request) {
       });
 
       // If marking as paid, create a daybook entry
-      if (validatedData.status === "paid" && validatedData.paymentDate && validatedData.paymentMethod) {
+      if (
+        validatedData.status === "paid" &&
+        validatedData.paymentDate &&
+        validatedData.paymentMethod
+      ) {
         await tx.daybookEntry.create({
           data: {
             userId: user.id,
+            userName:
+              user.firstName ||
+              user.emailAddresses[0]?.emailAddress ||
+              "Unknown",
             date: validatedData.paymentDate,
             amount: installment.amount,
             type: "income",
             description: `Installment payment for sale #${installment.saleId}`,
             reference: `INST-${installment.id}`,
             category: "installments",
-            paymentMethod: validatedData.paymentMethod,
+            paymentMethod: validatedData.paymentMethod?.toUpperCase(),
             status: "completed",
           },
         });
@@ -117,10 +128,7 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
@@ -143,4 +151,4 @@ export async function DELETE(req: Request) {
     console.error("[INSTALLMENT_DELETE]", error);
     return new NextResponse("Internal error", { status: 500 });
   }
-} 
+}

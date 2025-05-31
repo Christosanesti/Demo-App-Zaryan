@@ -66,9 +66,9 @@ const formSchema = z.object({
   type: z.enum(["income", "expense"]),
   description: z.string().min(1, "Description is required"),
   reference: z.string().min(1, "Reference is required"),
-  category: z.string().default("uncategorized"),
-  paymentMethod: z.enum(["cash", "bank", "mobile"]).default("cash"),
-  status: z.enum(["completed", "pending", "cancelled"]).default("completed"),
+  category: z.string().optional(),
+  paymentMethod: z.enum(["cash", "bank", "mobile"]).optional(),
+  status: z.enum(["completed", "pending", "cancelled"]).optional(),
   attachments: z.string().optional(),
   notes: z.string().optional(),
 });

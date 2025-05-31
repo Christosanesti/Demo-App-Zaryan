@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,11 +11,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { StockForm } from "./StockForm";
-import type { StockFormValues } from "@/hooks/use-stock";
+import type { Stock } from "@/hooks/use-stock";
 
 interface StockDialogProps {
   mode?: "add" | "edit";
-  initialData?: StockFormValues;
+  initialData?: Stock;
 }
 
 export function StockDialog({ mode = "add", initialData }: StockDialogProps) {

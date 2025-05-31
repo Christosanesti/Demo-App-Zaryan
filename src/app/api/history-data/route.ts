@@ -1,6 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import { Period, TimeFrame } from "@/lib/types";
-import { currentUser } from "@clerk/nextjs/server";
+import { ensureUserInDB } from "@/lib/auth-utils";
 import { getDaysInMonth } from "date-fns";
 import { redirect } from "next/navigation";
 import z from "zod";
@@ -15,10 +15,7 @@ type HistoryData = {
 };
 
 export async function GET(request: Request) {
-  const user = await currentUser();
-  if (!user) {
-    redirect("sign-in");
-  }
+  const { clerkUser: user } = await ensureUserInDB();
 
   const { searchParams } = new URL(request.url);
   const timeFrameParam = searchParams.get("timeFrame");
@@ -79,22 +76,20 @@ async function getYearHistoryData(
   userId: string,
   year: number
 ): Promise<HistoryData[]> {
-  const result = await prisma.yearHistory.groupBy({
-    by: ["month"],
+  const entries = await prisma.daybookEntry.findMany({
     where: {
       userId,
-      year,
+      date: {
+        gte: new Date(year, 0, 1),
+        lt: new Date(year + 1, 0, 1),
+      },
     },
-    _sum: {
-      expense: true,
-      income: true,
-    },
-    orderBy: {
-      month: "asc",
+    select: {
+      date: true,
+      type: true,
+      amount: true,
     },
   });
-
-  if (!result || result.length === 0) return [];
 
   const history: HistoryData[] = [];
 
@@ -102,10 +97,18 @@ async function getYearHistoryData(
     let expense = 0;
     let income = 0;
 
-    const month = result.find((row) => row.month === i);
-    if (month) {
-      expense = month._sum.expense || 0;
-      income = month._sum.income || 0;
+    // Filter entries for this month and calculate totals
+    const monthEntries = entries.filter((entry) => {
+      const entryDate = new Date(entry.date);
+      return entryDate.getMonth() === i;
+    });
+
+    for (const entry of monthEntries) {
+      if (entry.type === "expense") {
+        expense += entry.amount;
+      } else if (entry.type === "income") {
+        income += entry.amount;
+      }
     }
 
     history.push({
@@ -124,35 +127,40 @@ async function getMonthHistoryData(
   month: number,
   year: number
 ): Promise<HistoryData[]> {
-  const result = await prisma.monthHistory.groupBy({
-    by: ["day"],
+  const entries = await prisma.daybookEntry.findMany({
     where: {
       userId,
-      month,
-      year,
+      date: {
+        gte: new Date(year, month, 1),
+        lt: new Date(year, month + 1, 1),
+      },
     },
-    _sum: {
-      expense: true,
-      income: true,
-    },
-    orderBy: {
-      day: "asc",
+    select: {
+      date: true,
+      type: true,
+      amount: true,
     },
   });
-
-  if (!result || result.length === 0) return [];
 
   const history: HistoryData[] = [];
   const daysInMonth = getDaysInMonth(new Date(year, month));
 
-  for (let i = 0; i < daysInMonth; i++) {
+  for (let i = 1; i <= daysInMonth; i++) {
     let expense = 0;
     let income = 0;
 
-    const day = result.find((row) => row.day === i);
-    if (day) {
-      expense = day._sum.expense || 0;
-      income = day._sum.income || 0;
+    // Filter entries for this day and calculate totals
+    const dayEntries = entries.filter((entry) => {
+      const entryDate = new Date(entry.date);
+      return entryDate.getDate() === i;
+    });
+
+    for (const entry of dayEntries) {
+      if (entry.type === "expense") {
+        expense += entry.amount;
+      } else if (entry.type === "income") {
+        income += entry.amount;
+      }
     }
 
     history.push({
@@ -176,8 +184,7 @@ const createEntrySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const user = await currentUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  const { clerkUser: user } = await ensureUserInDB();
 
   const body = await req.json();
   const validatedData = createEntrySchema.parse(body);

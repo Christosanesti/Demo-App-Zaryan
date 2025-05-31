@@ -1,44 +1,80 @@
 import { NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
-import { z } from "zod";
+import { ensureUserInDB } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
 
-const updateEntrySchema = z.object({
-  date: z.string().optional(),
-  type: z.enum(["income", "expense"]).optional(),
-  amount: z.number().positive().optional(),
-  description: z.string().min(1).optional(),
-  reference: z.string().min(1).optional(),
-});
+export async function GET(
+  req: Request,
+  context: { params: Promise<{ entryId: string }> }
+) {
+  try {
+    const { clerkUser: user } = await ensureUserInDB();
+    const params = await context.params;
+
+    const entry = await prisma.daybookEntry.findUnique({
+      where: {
+        id: params.entryId,
+        userId: user.id,
+      },
+    });
+
+    if (!entry) {
+      return new NextResponse("Not found", { status: 404 });
+    }
+
+    return NextResponse.json(entry);
+  } catch (error: any) {
+    console.error("[DAYBOOK_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { entryId: string } }
+  context: { params: Promise<{ entryId: string }> }
 ) {
   try {
-    const user = await currentUser();
-
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
+    const params = await context.params;
 
     const body = await req.json();
-    const validatedData = updateEntrySchema.parse(body);
+    const {
+      date,
+      type,
+      amount,
+      description,
+      reference,
+      category,
+      paymentMethod,
+      status,
+      attachments,
+      notes,
+    } = body;
+
+    if (!date || !type || !amount) {
+      return new NextResponse("Missing required fields", { status: 400 });
+    }
 
     const entry = await prisma.daybookEntry.update({
       where: {
         id: params.entryId,
         userId: user.id,
       },
-      data: validatedData,
+      data: {
+        date: new Date(date),
+        type,
+        amount,
+        description,
+        reference,
+        category,
+        paymentMethod,
+        status,
+        attachments,
+        notes,
+      },
     });
 
     return NextResponse.json(entry);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return new NextResponse("Invalid request data", { status: 400 });
-    }
-
+  } catch (error: any) {
     console.error("[DAYBOOK_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
@@ -46,14 +82,11 @@ export async function PATCH(
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { entryId: string } }
+  context: { params: Promise<{ entryId: string }> }
 ) {
   try {
-    const user = await currentUser();
-
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
+    const params = await context.params;
 
     await prisma.daybookEntry.delete({
       where: {
@@ -63,7 +96,7 @@ export async function DELETE(
     });
 
     return new NextResponse(null, { status: 204 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[DAYBOOK_DELETE]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }

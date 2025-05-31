@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
-import { db } from "@/lib/db";
+import prisma from "@/lib/prisma";
 import { z } from "zod";
 
 const createCustomerSchema = z.object({
@@ -26,10 +26,12 @@ export async function POST(req: Request) {
     const body = await req.json();
     const validatedData = createCustomerSchema.parse(body);
 
-    const customer = await db.customer.create({
+    const customer = await prisma.customer.create({
       data: {
         ...validatedData,
         userId: user.id,
+        userName:
+          user.firstName || user.emailAddresses[0]?.emailAddress || "Unknown",
       },
     });
 
@@ -45,8 +47,8 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) {
+    const user = await currentUser();
+    if (!user?.id) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -56,19 +58,19 @@ export async function GET(req: Request) {
     const search = searchParams.get("search");
 
     const where = {
-      userId,
+      userId: user.id,
       ...(type && { type }),
       ...(status && { status }),
       ...(search && {
         OR: [
-          { name: { contains: search, mode: "insensitive" } },
-          { email: { contains: search, mode: "insensitive" } },
-          { phone: { contains: search, mode: "insensitive" } },
+          { name: { contains: search, mode: "insensitive" as const } },
+          { email: { contains: search, mode: "insensitive" as const } },
+          { phone: { contains: search, mode: "insensitive" as const } },
         ],
       }),
     };
 
-    const customers = await db.customer.findMany({
+    const customers = await prisma.customer.findMany({
       where,
       orderBy: {
         name: "asc",
@@ -84,8 +86,8 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) {
+    const user = await currentUser();
+    if (!user?.id) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -96,10 +98,10 @@ export async function PATCH(req: Request) {
       return new NextResponse("ID is required", { status: 400 });
     }
 
-    const customer = await db.customer.update({
+    const customer = await prisma.customer.update({
       where: {
         id,
-        userId,
+        userId: user.id,
       },
       data,
     });
@@ -113,8 +115,8 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) {
+    const user = await currentUser();
+    if (!user?.id) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -125,10 +127,10 @@ export async function DELETE(req: Request) {
       return new NextResponse("ID is required", { status: 400 });
     }
 
-    await db.customer.delete({
+    await prisma.customer.delete({
       where: {
         id,
-        userId,
+        userId: user.id,
       },
     });
 

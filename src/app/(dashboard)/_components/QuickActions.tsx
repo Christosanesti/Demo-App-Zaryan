@@ -1,109 +1,191 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import {
-  BookOpen,
-  Building2,
-  FileText,
-  Package,
-  Users,
-  Wallet,
-} from "lucide-react";
+import React, { Suspense } from "react";
 import { useRouter } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  ShoppingCart,
+  Users,
+  Package,
+  FileText,
+  Building2,
+  BookOpen,
+  Plus,
+  ArrowRight,
+  Zap,
+  Database,
+} from "lucide-react";
 import { toast } from "sonner";
-
-const actions = [
-  {
-    title: "New Sale",
-    description: "Create a new sale transaction",
-    icon: Wallet,
-    href: "/sales/new",
-    color: "from-blue-500/20 to-blue-600/20",
-    iconColor: "text-blue-400",
-  },
-  {
-    title: "Add Customer",
-    description: "Register a new customer",
-    icon: Users,
-    href: "/customers/new",
-    color: "from-purple-500/20 to-purple-600/20",
-    iconColor: "text-purple-400",
-  },
-  {
-    title: "Add Inventory",
-    description: "Add new items to inventory",
-    icon: Package,
-    href: "/inventory/new",
-    color: "from-green-500/20 to-green-600/20",
-    iconColor: "text-green-400",
-  },
-  {
-    title: "New Invoice",
-    description: "Create a new invoice",
-    icon: FileText,
-    href: "/invoices/new",
-    color: "from-orange-500/20 to-orange-600/20",
-    iconColor: "text-orange-400",
-  },
-  {
-    title: "Daybook",
-    description: "View daily transactions",
-    icon: BookOpen,
-    href: "/daybook",
-    color: "from-pink-500/20 to-pink-600/20",
-    iconColor: "text-pink-400",
-  },
-  {
-    title: "Company",
-    description: "Manage company details",
-    icon: Building2,
-    href: "/company",
-    color: "from-indigo-500/20 to-indigo-600/20",
-    iconColor: "text-indigo-400",
-  },
-];
+import { EnhancedCard } from "@/components/ui/design-system";
+import { ChartSkeleton } from "@/components/ui/skeleton-wrapper";
+import DashboardCharts from "./DashboardCharts";
+import Link from "next/link";
 
 export default function QuickActions() {
-  const router = useRouter();
+  const route = useRouter();
+
+  const actions = [
+    {
+      title: "New Sale",
+      description: "Record a new sale transaction",
+      icon: ShoppingCart,
+      href: "/sales",
+      color: "from-emerald-500 to-teal-600",
+      iconColor: "text-emerald-400",
+      bgGradient: "from-emerald-500/10 to-teal-600/10",
+      badge: "Revenue",
+      stats: "+12%",
+    },
+    {
+      title: "Add Customer",
+      description: "Register a new customer",
+      icon: Users,
+      href: "/customers",
+      color: "from-blue-500 to-cyan-600",
+      iconColor: "text-blue-400",
+      bgGradient: "from-blue-500/10 to-cyan-600/10",
+      badge: "Growth",
+      stats: "+8%",
+    },
+    {
+      title: "Add Inventory",
+      description: "Manage your product inventory",
+      icon: Package,
+      href: "/inventory",
+      color: "from-purple-500 to-pink-600",
+      iconColor: "text-purple-400",
+      bgGradient: "from-purple-500/10 to-pink-600/10",
+      badge: "Stock",
+      stats: "145 items",
+    },
+    {
+      title: "New Invoice",
+      description: "Create and send invoices",
+      icon: FileText,
+      href: "/invoices",
+      color: "from-orange-500 to-red-600",
+      iconColor: "text-orange-400",
+      bgGradient: "from-orange-500/10 to-red-600/10",
+      badge: "Billing",
+      stats: "23 pending",
+    },
+    {
+      title: "Ledgers",
+      description: "Manage financial ledgers and accounts",
+      icon: Database,
+      href: "/ledgers",
+      color: "from-cyan-500 to-blue-600",
+      iconColor: "text-cyan-400",
+      bgGradient: "from-cyan-500/10 to-blue-600/10",
+      badge: "Finance",
+      stats: "Multi-Type",
+    },
+    {
+      title: "Daily Book",
+      description: "View daily transactions",
+      icon: BookOpen,
+      href: "/daybook",
+      color: "from-indigo-500 to-purple-600",
+      iconColor: "text-indigo-400",
+      bgGradient: "from-indigo-500/10 to-purple-600/10",
+      badge: "Analytics",
+      stats: "Today",
+    },
+  ];
+
+  const handleNavigation = (href: string, title: string) => {
+    const route = useRouter();
+  };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {actions.map((action, index) => (
-        <motion.div
-          key={action.title}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: index * 0.1 }}
-          whileHover={{ scale: 1.02 }}
-          className="group"
-        >
-          <Button
-            variant="ghost"
-            className={`w-full h-auto p-4 bg-gradient-to-br ${action.color} border border-slate-700/50 hover:border-slate-600/50 transition-all duration-300`}
-            onClick={() => {
-              router.push(action.href);
-              toast.success(`Navigating to ${action.title}`);
-            }}
-          >
-            <div className="flex items-start space-x-4 w-full">
-              <div
-                className={`p-2 rounded-lg bg-slate-800/50 group-hover:bg-slate-700/50 transition-colors duration-300`}
-              >
-                <action.icon className={`h-6 w-6 ${action.iconColor}`} />
-              </div>
-              <div className="flex-1 text-left">
-                <h3 className="font-semibold text-slate-200 group-hover:text-white transition-colors duration-300">
-                  {action.title}
-                </h3>
-                <p className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors duration-300">
-                  {action.description}
-                </p>
-              </div>
-            </div>
-          </Button>
-        </motion.div>
-      ))}
+    <div className="space-y-8">
+      <EnhancedCard
+        title="Quick Actions"
+        description="Frequently used operations for efficient workflow"
+        icon={Zap}
+        iconColor="text-yellow-400"
+        gradientFrom="from-yellow-500/5"
+        gradientTo="to-orange-500/5"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {actions.map((action, index) => {
+            const Icon = action.icon;
+            return (
+              <Link href={action.href} key={action.title}>
+                <div className="group hover:scale-105 hover:-translate-y-1 transition-transform duration-300">
+                  <Card
+                    className={`relative overflow-hidden bg-gradient-to-br ${action.bgGradient} border-slate-700/50 hover:border-slate-600/50 transition-all duration-300 shadow-lg hover:shadow-xl cursor-pointer`}
+                  >
+                    {/* Background Decoration */}
+                    <div className="absolute inset-0 opacity-30">
+                      <div
+                        className={`absolute inset-0 bg-gradient-to-br ${action.color}`}
+                      />
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,_rgba(255,255,255,0.1)_0%,_transparent_50%)]" />
+                    </div>
+
+                    {/* Content */}
+                    <CardContent className="relative p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div
+                          className={`p-3 rounded-xl bg-gradient-to-br ${action.color} shadow-lg group-hover:scale-110 transition-transform duration-300`}
+                        >
+                          <Icon className={`h-6 w-6 text-white`} />
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`border-slate-600/30 ${action.iconColor} bg-slate-800/50 backdrop-blur-sm`}
+                          >
+                            {action.badge}
+                          </Badge>
+                          <span className="text-xs text-slate-400 font-medium">
+                            {action.stats}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h3 className="text-lg font-semibold text-slate-200 group-hover:text-white transition-colors">
+                          {action.title}
+                        </h3>
+                        <p className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors">
+                          {action.description}
+                        </p>
+                      </div>
+
+                      <Button
+                        onClick={() =>
+                          handleNavigation(action.href, action.title)
+                        }
+                        variant="ghost"
+                        className="w-full mt-4 justify-between hover:bg-white/5 group-hover:bg-white/10 transition-all duration-300"
+                      >
+                        <span className="text-slate-300 group-hover:text-slate-200">
+                          Get Started
+                        </span>
+                        <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-slate-200 group-hover:translate-x-1 transition-all duration-300" />
+                      </Button>
+                    </CardContent>
+
+                    {/* Hover Glow Effect */}
+                    <div
+                      className={`absolute inset-0 opacity-0 group-hover:opacity-20 transition-opacity duration-300 bg-gradient-to-br ${action.color} blur-xl`}
+                    />
+                  </Card>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </EnhancedCard>
+
+      {/* Dashboard Charts Component with Suspense boundary */}
+      <Suspense fallback={<ChartSkeleton />}>
+        <DashboardCharts />
+      </Suspense>
     </div>
   );
 }

@@ -73,7 +73,7 @@ export default function DashboardPage() {
   return (
     <div
       ref={containerRef}
-      className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-6"
+      className="min-h-screen mx-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-6"
     >
       {/* Header Section */}
       <motion.div

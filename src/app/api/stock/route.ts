@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
+import { ensureUserInDB } from "@/lib/auth-utils";
 
 const stockSchema = z.object({
   date: z.string(),
@@ -13,11 +14,7 @@ const stockSchema = z.object({
 
 export async function GET() {
   try {
-    const user = await currentUser();
-
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
 
     const stocks = await prisma.stock.findMany({
       where: {
@@ -37,11 +34,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const user = await currentUser();
-
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { clerkUser: user } = await ensureUserInDB();
 
     const body = await req.json();
     const validatedData = stockSchema.parse(body);

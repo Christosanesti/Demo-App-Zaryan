@@ -118,9 +118,9 @@ export default function History() {
                         </span>
                         <Badge
                           variant={
-                            item.status === "completed" ? "success"
+                            item.status === "completed" ? "default"
                             : item.status === "processing" ?
-                              "warning"
+                              "secondary"
                             : "destructive"
                           }
                           className="text-xs"

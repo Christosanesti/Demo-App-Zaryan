@@ -13,7 +13,7 @@ const stockSchema = z.object({
 
 export async function GET(
   req: Request,
-  { params }: { params: { stockId: string } }
+  context: { params: Promise<{ stockId: string }> }
 ) {
   try {
     const user = await currentUser();
@@ -21,6 +21,8 @@ export async function GET(
     if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+
+    const params = await context.params;
 
     const stock = await prisma.stock.findUnique({
       where: {
@@ -42,7 +44,7 @@ export async function GET(
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { stockId: string } }
+  context: { params: Promise<{ stockId: string }> }
 ) {
   try {
     const user = await currentUser();
@@ -50,6 +52,8 @@ export async function PATCH(
     if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+
+    const params = await context.params;
 
     const body = await req.json();
     const validatedData = stockSchema.parse(body);
@@ -105,7 +109,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { stockId: string } }
+  context: { params: Promise<{ stockId: string }> }
 ) {
   try {
     const user = await currentUser();
@@ -113,6 +117,8 @@ export async function DELETE(
     if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+
+    const params = await context.params;
 
     const stock = await prisma.stock.findUnique({
       where: {

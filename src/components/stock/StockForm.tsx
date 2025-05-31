@@ -1,10 +1,12 @@
+"use client";
+
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useStock, type StockFormValues } from "@/hooks/use-stock";
+import { useStock, type StockFormValues, type Stock } from "@/hooks/use-stock";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -32,7 +34,7 @@ const formSchema = z.object({
 });
 
 interface StockFormProps {
-  initialData?: StockFormValues;
+  initialData?: Stock;
   onSuccess?: () => void;
 }
 
@@ -41,19 +43,28 @@ export function StockForm({ initialData, onSuccess }: StockFormProps) {
 
   const form = useForm<StockFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData || {
-      date: format(new Date(), "yyyy-MM-dd"),
-      productName: "",
-      amount: 0,
-      quantity: 1,
-      description: "",
-    },
+    defaultValues:
+      initialData ?
+        {
+          date: initialData.date,
+          productName: initialData.productName,
+          amount: initialData.amount,
+          quantity: initialData.quantity,
+          description: initialData.description,
+        }
+      : {
+          date: format(new Date(), "yyyy-MM-dd"),
+          productName: "",
+          amount: 0,
+          quantity: 1,
+          description: "",
+        },
   });
 
   const onSubmit = async (values: StockFormValues) => {
     try {
       if (initialData) {
-        await updateStock.mutateAsync({ id: initialData.id!, values });
+        await updateStock.mutateAsync({ id: initialData.id, values });
       } else {
         await createStock.mutateAsync(values);
       }

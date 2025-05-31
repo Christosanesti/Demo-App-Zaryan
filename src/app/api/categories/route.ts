@@ -1,7 +1,8 @@
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+
 export async function GET(request: Request) {
   const user = await currentUser();
   if (!user) {
@@ -22,15 +23,50 @@ export async function GET(request: Request) {
 
   const type = queryParams.data;
 
-  const categories = await prisma.category.findMany({
+  // Get unique categories from DaybookEntry
+  const daybookCategories = await prisma.daybookEntry.findMany({
     where: {
       userId: user.id,
+      category: {
+        not: null,
+      },
       ...(type && { type }),
     },
-    orderBy: {
-      name: "asc",
+    select: {
+      category: true,
     },
+    distinct: ["category"],
   });
+
+  // Get unique categories from LedgerEntry
+  const ledgerCategories = await prisma.ledgerEntry.findMany({
+    where: {
+      userId: user.id,
+      category: {
+        not: null,
+      },
+    },
+    select: {
+      category: true,
+    },
+    distinct: ["category"],
+  });
+
+  // Combine and deduplicate categories
+  const allCategories = [
+    ...daybookCategories.map((entry) => entry.category),
+    ...ledgerCategories.map((entry) => entry.category),
+  ].filter(
+    (category, index, array) => category && array.indexOf(category) === index
+  );
+
+  // Format as objects with name property for consistency
+  const categories = allCategories.map((name) => ({
+    id: name,
+    name,
+    type: type || "general",
+    userId: user.id,
+  }));
 
   return Response.json(categories);
 }

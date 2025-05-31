@@ -20,16 +20,13 @@ const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   quantity: z.coerce.number().min(0, "Quantity must be positive"),
-  unitPrice: z.coerce.number().min(0, "Unit price must be positive"),
-  category: z.string().min(1, "Category is required"),
-  supplier: z.string().optional(),
-  reorderLevel: z.coerce
+  price: z.coerce.number().min(0, "Price must be positive"),
+  costPrice: z.coerce.number().min(0, "Cost price must be positive").optional(),
+  sellingPrice: z.coerce
     .number()
-    .min(0, "Reorder level must be positive")
+    .min(0, "Selling price must be positive")
     .optional(),
-  location: z.string().optional(),
-  sku: z.string().optional(),
-  barcode: z.string().optional(),
+  category: z.string().optional(),
 });
 
 interface InventoryFormProps {
@@ -46,22 +43,24 @@ export function InventoryForm({ item, onSuccess }: InventoryFormProps) {
       name: "",
       description: "",
       quantity: 0,
-      unitPrice: 0,
+      price: 0,
+      costPrice: 0,
+      sellingPrice: 0,
       category: "",
-      supplier: "",
-      reorderLevel: 0,
-      location: "",
-      sku: "",
-      barcode: "",
     },
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      const submissionData = {
+        ...values,
+        userName: "User", // This will be set by the API
+      };
+
       if (item) {
-        await updateItem({ id: item.id, ...values });
+        await updateItem({ id: item.id, ...submissionData });
       } else {
-        await createItem(values);
+        await createItem(submissionData);
       }
       form.reset();
       onSuccess?.();
@@ -123,10 +122,10 @@ export function InventoryForm({ item, onSuccess }: InventoryFormProps) {
 
             <FormField
               control={form.control}
-              name="unitPrice"
+              name="price"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Unit Price</FormLabel>
+                  <FormLabel>Price</FormLabel>
                   <FormControl>
                     <Input type="number" min="0" step="0.01" {...field} />
                   </FormControl>
@@ -137,12 +136,12 @@ export function InventoryForm({ item, onSuccess }: InventoryFormProps) {
 
             <FormField
               control={form.control}
-              name="supplier"
+              name="costPrice"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Supplier</FormLabel>
+                  <FormLabel>Cost Price (Optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Supplier name" {...field} />
+                    <Input type="number" min="0" step="0.01" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -151,54 +150,12 @@ export function InventoryForm({ item, onSuccess }: InventoryFormProps) {
 
             <FormField
               control={form.control}
-              name="reorderLevel"
+              name="sellingPrice"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Reorder Level</FormLabel>
+                  <FormLabel>Selling Price (Optional)</FormLabel>
                   <FormControl>
-                    <Input type="number" min="0" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="location"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Location</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Storage location" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="sku"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>SKU</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Stock keeping unit" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="barcode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Barcode</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Barcode" {...field} />
+                    <Input type="number" min="0" step="0.01" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { currentUser } from "@clerk/nextjs";
+import { currentUser } from "@clerk/nextjs/server";
 import { StockTable } from "@/components/stock/StockTable";
 
 export const dynamic = "force-dynamic";

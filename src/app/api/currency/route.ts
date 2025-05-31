@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
 import { DEFAULT_CURRENCY } from "@/schema/currency";
 import { NextResponse } from "next/server";
@@ -21,7 +21,7 @@ export async function GET() {
       const newSettings = await prisma.userSettings.create({
         data: {
           userId: user.id,
-          currency: DEFAULT_CURRENCY,
+          currency: DEFAULT_CURRENCY.code,
         },
       });
       return NextResponse.json(newSettings);
@@ -47,11 +47,11 @@ export async function POST() {
         userId: user.id,
       },
       update: {
-        currency: DEFAULT_CURRENCY,
+        currency: DEFAULT_CURRENCY.code,
       },
       create: {
         userId: user.id,
-        currency: DEFAULT_CURRENCY,
+        currency: DEFAULT_CURRENCY.code,
       },
     });
 
