@@ -2,7 +2,11 @@ import { getCurrentUserWithDB } from "@/lib/auth-utils";
 import DaybookClient from "./_components/DaybookClient";
 
 export default async function DaybookPage() {
-  const { userSettings } = await getCurrentUserWithDB();
+  const user = await getCurrentUserWithDB();
 
-  return <DaybookClient userSettings={userSettings} />;
+  if (!user) {
+    return null;
+  }
+
+  return <DaybookClient userSettings={user.settings} />;
 }

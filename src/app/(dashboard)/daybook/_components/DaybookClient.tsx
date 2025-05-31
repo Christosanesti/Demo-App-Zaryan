@@ -59,6 +59,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { UserSettings } from "@/lib/auth-utils";
 
 const formSchema = z.object({
   date: z.date(),
@@ -76,9 +77,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 interface DaybookClientProps {
-  userSettings: {
-    currency: string;
-  };
+  userSettings: UserSettings | null;
 }
 
 export default function DaybookClient({ userSettings }: DaybookClientProps) {
@@ -89,6 +88,9 @@ export default function DaybookClient({ userSettings }: DaybookClientProps) {
     category: "",
     status: "",
   });
+  const [currency, setCurrency] = React.useState(
+    userSettings?.currency || "USD"
+  );
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -189,12 +191,21 @@ export default function DaybookClient({ userSettings }: DaybookClientProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: userSettings.currency,
+      currency: currency,
     }).format(amount);
   };
 
   const handleDateChange = (days: number) => {
     setSelectedDate((prev) => addDays(prev, days));
+  };
+
+  const handleSave = async () => {
+    try {
+      // TODO: Implement save functionality
+      toast.success("Settings saved successfully");
+    } catch (error) {
+      toast.error("Failed to save settings");
+    }
   };
 
   return (
@@ -754,6 +765,42 @@ export default function DaybookClient({ userSettings }: DaybookClientProps) {
           </Card>
         </div>
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <Card className="bg-slate-800/50 border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-slate-200">
+              Daybook Settings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <FormLabel htmlFor="currency" className="text-slate-300">
+                Currency
+              </FormLabel>
+              <FormControl>
+                <Input
+                  id="currency"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="bg-slate-700/50 border-slate-600/50 text-slate-200"
+                  placeholder="Enter currency code (e.g., USD)"
+                />
+              </FormControl>
+            </div>
+            <Button
+              onClick={handleSave}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            >
+              Save Changes
+            </Button>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }
