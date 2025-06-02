@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
+import { getAuthUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import prisma from "@/lib/prisma";
 import { ensureUserInDB } from "@/lib/auth-utils";
 
 const stockSchema = z.object({
@@ -34,7 +34,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const { clerkUser: user } = await ensureUserInDB();
+    const { user } = await getAuthUser();
 
     const body = await req.json();
     const validatedData = stockSchema.parse(body);

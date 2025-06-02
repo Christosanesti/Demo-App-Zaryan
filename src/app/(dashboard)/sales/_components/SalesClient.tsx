@@ -198,8 +198,8 @@ export default function SalesClient({ userSettings }: SalesClientProps) {
                     </Button>
                   </motion.div>
                 </SheetTrigger>
-                <SheetContent className="w-[400px] sm:w-[540px] bg-slate-900/95 border-slate-700/50 backdrop-blur-lg">
-                  <SheetHeader>
+                <SheetContent className="w-[400px] sm:w-[540px] bg-slate-900/95 border-slate-700/50 backdrop-blur-lg overflow-hidden">
+                  <SheetHeader className="pb-4">
                     <SheetTitle className="text-slate-200 text-xl">
                       Create New Sale
                     </SheetTitle>
@@ -208,201 +208,203 @@ export default function SalesClient({ userSettings }: SalesClientProps) {
                     </SheetDescription>
                   </SheetHeader>
 
-                  <Form {...form}>
-                    <form
-                      onSubmit={form.handleSubmit(onSubmit)}
-                      className="space-y-6 mt-6"
-                    >
-                      <FormField
-                        control={form.control}
-                        name="customerId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-300 font-medium">
-                              Customer
-                            </FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
+                  <ScrollArea className="h-[calc(100vh-8rem)] pr-4">
+                    <Form {...form}>
+                      <form
+                        onSubmit={form.handleSubmit(onSubmit)}
+                        className="space-y-6"
+                      >
+                        <FormField
+                          control={form.control}
+                          name="customerId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-300 font-medium">
+                                Customer
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="bg-slate-800/50 border-slate-600/50 hover:border-slate-500/50 transition-colors">
+                                    <SelectValue placeholder="Select customer" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-800/95 border-slate-600/50 backdrop-blur-lg">
+                                  {customers.map((customer: any) => (
+                                    <SelectItem
+                                      key={customer.id}
+                                      value={customer.id}
+                                      className="hover:bg-slate-700/50"
+                                    >
+                                      {customer.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="inventoryId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-300 font-medium">
+                                Product
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="bg-slate-800/50 border-slate-600/50 hover:border-slate-500/50 transition-colors">
+                                    <SelectValue placeholder="Select product" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-800/95 border-slate-600/50 backdrop-blur-lg">
+                                  {inventory.map((item: any) => (
+                                    <SelectItem
+                                      key={item.id}
+                                      value={item.id}
+                                      className="hover:bg-slate-700/50"
+                                    >
+                                      {item.name} - {formatCurrency(item.price)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="amount"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-300 font-medium">
+                                Total Amount
+                              </FormLabel>
                               <FormControl>
-                                <SelectTrigger className="bg-slate-800/50 border-slate-600/50 hover:border-slate-500/50 transition-colors">
-                                  <SelectValue placeholder="Select customer" />
-                                </SelectTrigger>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  className="bg-slate-800/50 border-slate-600/50"
+                                  {...field}
+                                  onChange={(e) =>
+                                    field.onChange(parseFloat(e.target.value))
+                                  }
+                                />
                               </FormControl>
-                              <SelectContent className="bg-slate-800/95 border-slate-600/50 backdrop-blur-lg">
-                                {customers.map((customer: any) => (
-                                  <SelectItem
-                                    key={customer.id}
-                                    value={customer.id}
-                                    className="hover:bg-slate-700/50"
-                                  >
-                                    {customer.name}
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="advancePayment"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-300 font-medium">
+                                Advance Payment
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  className="bg-slate-800/50 border-slate-600/50"
+                                  {...field}
+                                  onChange={(e) =>
+                                    field.onChange(parseFloat(e.target.value))
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="installmentMonths"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-300 font-medium">
+                                Installment Months
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  className="bg-slate-800/50 border-slate-600/50"
+                                  {...field}
+                                  onChange={(e) =>
+                                    field.onChange(parseInt(e.target.value))
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="paymentMode"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-300 font-medium">
+                                Payment Mode
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="bg-slate-800/50 border-slate-600/50 hover:border-slate-500/50 transition-colors">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-800/95 border-slate-600/50 backdrop-blur-lg">
+                                  <SelectItem value="cash">Cash</SelectItem>
+                                  <SelectItem value="bank">
+                                    Bank Transfer
                                   </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                      <FormField
-                        control={form.control}
-                        name="inventoryId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-300 font-medium">
-                              Product
-                            </FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger className="bg-slate-800/50 border-slate-600/50 hover:border-slate-500/50 transition-colors">
-                                  <SelectValue placeholder="Select product" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent className="bg-slate-800/95 border-slate-600/50 backdrop-blur-lg">
-                                {inventory.map((item: any) => (
-                                  <SelectItem
-                                    key={item.id}
-                                    value={item.id}
-                                    className="hover:bg-slate-700/50"
-                                  >
-                                    {item.name} - {formatCurrency(item.price)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="amount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-300 font-medium">
-                              Total Amount
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                className="bg-slate-800/50 border-slate-600/50"
-                                {...field}
-                                onChange={(e) =>
-                                  field.onChange(parseFloat(e.target.value))
-                                }
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="advancePayment"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-300 font-medium">
-                              Advance Payment
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                className="bg-slate-800/50 border-slate-600/50"
-                                {...field}
-                                onChange={(e) =>
-                                  field.onChange(parseFloat(e.target.value))
-                                }
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="installmentMonths"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-300 font-medium">
-                              Installment Months
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                min="1"
-                                className="bg-slate-800/50 border-slate-600/50"
-                                {...field}
-                                onChange={(e) =>
-                                  field.onChange(parseInt(e.target.value))
-                                }
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="paymentMode"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-300 font-medium">
-                              Payment Mode
-                            </FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger className="bg-slate-800/50 border-slate-600/50 hover:border-slate-500/50 transition-colors">
-                                  <SelectValue />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent className="bg-slate-800/95 border-slate-600/50 backdrop-blur-lg">
-                                <SelectItem value="cash">Cash</SelectItem>
-                                <SelectItem value="bank">
-                                  Bank Transfer
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="flex justify-end gap-4 pt-6">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setIsSheetOpen(false)}
-                          className="border-slate-600/50 text-slate-400 hover:bg-slate-800/50"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          type="submit"
-                          disabled={createMutation.isPending}
-                          className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                        >
-                          {createMutation.isPending ?
-                            "Creating..."
-                          : "Create Sale"}
-                        </Button>
-                      </div>
-                    </form>
-                  </Form>
+                        <div className="flex justify-end gap-4 pt-6">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsSheetOpen(false)}
+                            className="border-slate-600/50 text-slate-400 hover:bg-slate-800/50"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={createMutation.isPending}
+                            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                          >
+                            {createMutation.isPending ?
+                              "Creating..."
+                            : "Create Sale"}
+                          </Button>
+                        </div>
+                      </form>
+                    </Form>
+                  </ScrollArea>
                 </SheetContent>
               </Sheet>
             </div>

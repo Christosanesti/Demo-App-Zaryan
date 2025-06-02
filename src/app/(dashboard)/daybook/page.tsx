@@ -1,12 +1,11 @@
-import { getCurrentUserWithDB } from "@/lib/auth-utils";
 import DaybookClient from "./_components/DaybookClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function DaybookPage() {
-  const user = await getCurrentUserWithDB();
-
-  if (!user) {
-    return null;
-  }
-
-  return <DaybookClient userSettings={user.settings} />;
+  return (
+    <div className="container mx-auto py-10">
+      <DaybookClient />
+    </div>
+  );
 }

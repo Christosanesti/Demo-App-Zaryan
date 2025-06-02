@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureUserInDB } from "@/lib/auth-utils";
+import { getAuthUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
@@ -7,7 +7,7 @@ export async function GET(
   context: { params: Promise<{ entryId: string }> }
 ) {
   try {
-    const { clerkUser: user } = await ensureUserInDB();
+    const { user } = await getAuthUser();
     const params = await context.params;
 
     const entry = await prisma.daybookEntry.findUnique({
@@ -33,7 +33,7 @@ export async function PATCH(
   context: { params: Promise<{ entryId: string }> }
 ) {
   try {
-    const { clerkUser: user } = await ensureUserInDB();
+    const { user } = await getAuthUser();
     const params = await context.params;
 
     const body = await req.json();
@@ -85,7 +85,7 @@ export async function DELETE(
   context: { params: Promise<{ entryId: string }> }
 ) {
   try {
-    const { clerkUser: user } = await ensureUserInDB();
+    const { user } = await getAuthUser();
     const params = await context.params;
 
     await prisma.daybookEntry.delete({

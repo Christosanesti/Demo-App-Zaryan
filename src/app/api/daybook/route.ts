@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
 import { z } from "zod";
-import { ensureUserInDB } from "@/lib/auth-utils";
-import prisma from "@/lib/prisma";
+import { getAuthUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 const entrySchema = z.object({
   date: z.string().transform((str) => new Date(str)),
@@ -11,7 +10,7 @@ const entrySchema = z.object({
   description: z.string().min(1, "Description is required"),
   reference: z.string().min(1, "Reference is required"),
   category: z.string().optional(),
-  paymentMethod: z.enum(["cash", "bank", "mobile"]).optional(),
+  paymentMethod: z.enum(["cash", "bank", "mobileI"]).optional(),
   status: z.enum(["completed", "pending", "cancelled"]).optional(),
   attachments: z.string().optional(),
   notes: z.string().optional(),
@@ -22,10 +21,7 @@ const updateEntrySchema = entrySchema.partial();
 // GET /api/daybook
 export async function GET() {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { user } = await getAuthUser();
 
     const entries = await prisma.daybookEntry.findMany({
       where: {
@@ -36,20 +32,26 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(entries);
+    return NextResponse.json({ entries });
   } catch (error) {
     console.error("[DAYBOOK_GET]", error);
-    return new NextResponse("Internal Error", { status: 500 });
+    return new NextResponse(
+      JSON.stringify({
+        message: "Failed to fetch entries",
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 }
 
 // POST /api/daybook
 export async function POST(req: Request) {
   try {
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const { user } = await getAuthUser();
 
     const body = await req.json();
     console.log("Received request body:", body);

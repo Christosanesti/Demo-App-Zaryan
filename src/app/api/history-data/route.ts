@@ -5,6 +5,7 @@ import { getDaysInMonth } from "date-fns";
 import { redirect } from "next/navigation";
 import z from "zod";
 import { NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth";
 
 type HistoryData = {
   month: number;
@@ -184,7 +185,7 @@ const createEntrySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const { clerkUser: user } = await ensureUserInDB();
+  const { user } = await getAuthUser();
 
   const body = await req.json();
   const validatedData = createEntrySchema.parse(body);

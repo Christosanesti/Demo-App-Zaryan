@@ -10,32 +10,35 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const period = searchParams.get("period") || "6months"; // 6months, 1year, 3months
+    const period = searchParams.get("period") || "6months";
 
-    // Calculate date range
-    const now = new Date();
-    let startDate: Date;
-    let monthsBack: number;
+    // Calculate date range based on period
+    const endDate = new Date();
+    let startDate = new Date();
 
     switch (period) {
       case "3months":
-        monthsBack = 3;
+        startDate.setMonth(startDate.getMonth() - 3);
+        break;
+      case "6months":
+        startDate.setMonth(startDate.getMonth() - 6);
         break;
       case "1year":
-        monthsBack = 12;
+        startDate.setFullYear(startDate.getFullYear() - 1);
         break;
       default:
-        monthsBack = 6;
+        startDate.setMonth(startDate.getMonth() - 6);
     }
 
-    startDate = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
-
     // Get sales data grouped by month
-    const salesByMonth = await prisma.sale.groupBy({
+    const salesData = await prisma.sale.groupBy({
       by: ["date"],
       where: {
         userId: user.id,
-        createdAt: { gte: startDate },
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
       _sum: {
         amount: true,
@@ -45,80 +48,40 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Get customer registrations by month
-    const customersByMonth = await prisma.customer.groupBy({
+    // Get customer counts for each month
+    const customerData = await prisma.customer.groupBy({
       by: ["createdAt"],
       where: {
         userId: user.id,
-        createdAt: { gte: startDate },
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
       _count: {
         id: true,
       },
     });
 
-    // Create monthly aggregates
-    const monthlyData: Record<
-      string,
-      {
-        month: string;
-        sales: number;
-        revenue: number;
-        customers: number;
-      }
-    > = {};
-
-    // Initialize all months with zero values
-    for (let i = 0; i < monthsBack; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthKey = date.toLocaleString("default", { month: "short" });
-      monthlyData[monthKey] = {
-        month: monthKey,
-        sales: 0,
-        revenue: 0,
-        customers: 0,
-      };
-    }
-
-    // Aggregate sales data
-    salesByMonth.forEach((sale) => {
-      const monthKey = new Date(sale.date).toLocaleString("default", {
+    // Format data for the chart
+    const formattedData = salesData.map((sale) => ({
+      month: sale.date.toLocaleDateString("en-US", {
         month: "short",
-      });
-      if (monthlyData[monthKey]) {
-        monthlyData[monthKey].sales += sale._count.id;
-        monthlyData[monthKey].revenue += sale._sum.amount || 0;
-      }
-    });
+        year: "numeric",
+      }),
+      sales: sale._count.id,
+      revenue: sale._sum.amount || 0,
+      customers:
+        customerData.find(
+          (c) =>
+            c.createdAt.getMonth() === sale.date.getMonth() &&
+            c.createdAt.getFullYear() === sale.date.getFullYear()
+        )?._count.id || 0,
+    }));
 
-    // Aggregate customer data
-    customersByMonth.forEach((customer) => {
-      const monthKey = new Date(customer.createdAt).toLocaleString("default", {
-        month: "short",
-      });
-      if (monthlyData[monthKey]) {
-        monthlyData[monthKey].customers += customer._count.id;
-      }
-    });
-
-    // Convert to array and sort by month order
-    const salesData = Object.values(monthlyData)
-      .reverse() // Reverse to get chronological order
-      .map((data) => ({
-        month: data.month,
-        sales: Math.round(data.sales),
-        revenue: Math.round(data.revenue),
-        customers: data.customers,
-      }));
-
-    return NextResponse.json({
-      success: true,
-      data: salesData,
-      period,
-      timestamp: new Date().toISOString(),
-    });
+    return NextResponse.json({ data: formattedData });
   } catch (error) {
-    console.error("Sales analytics error:", error);
+    console.error("[SALES_ANALYTICS]", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

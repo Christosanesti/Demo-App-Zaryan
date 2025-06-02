@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
       value: number;
       color: string;
       count?: number;
+      percentage: number;
     }> = [];
 
     // Color palette for categories
@@ -31,128 +32,124 @@ export async function GET(request: NextRequest) {
       "#ffb347", // Orange
     ];
 
-    if (type === "inventory") {
-      // Get inventory categories
-      const inventoryByCategory = await prisma.inventory.groupBy({
-        by: ["category"],
-        where: {
-          userId: user.id,
-          category: { not: null },
-        },
-        _count: {
-          id: true,
-        },
-        _sum: {
-          quantity: true,
-          price: true,
-        },
-      });
+    switch (type) {
+      case "inventory":
+        // Get inventory items grouped by category
+        const inventoryData = await prisma.inventory.groupBy({
+          by: ["category"],
+          where: {
+            userId: user.id,
+          },
+          _sum: {
+            quantity: true,
+          },
+          _count: {
+            id: true,
+          },
+        });
 
-      categoryData = inventoryByCategory
-        .filter((item) => item.category) // Remove null categories
-        .map((item, index) => ({
+        categoryData = inventoryData.map((item) => ({
           name: item.category || "Uncategorized",
           value: item._sum.quantity || 0,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          percentage: 0, // Will be calculated after
           count: item._count.id,
-          color: colors[index % colors.length],
-        }))
-        .sort((a, b) => b.value - a.value) // Sort by quantity descending
-        .slice(0, 8); // Limit to top 8 categories
-    } else if (type === "sales") {
-      // Get sales by inventory category
-      const salesByCategory = await prisma.sale.findMany({
-        where: {
-          userId: user.id,
-        },
-        include: {
-          item: {
-            select: {
-              category: true,
+        }));
+        break;
+
+      case "sales":
+        // Get sales data grouped by category
+        const salesData = await prisma.sale.groupBy({
+          by: ["itemId"],
+          where: {
+            userId: user.id,
+          },
+          _sum: {
+            amount: true,
+          },
+          _count: {
+            id: true,
+          },
+        });
+
+        // Get item details for each sale
+        const items = await prisma.inventory.findMany({
+          where: {
+            id: {
+              in: salesData.map((sale) => sale.itemId),
             },
           },
-        },
-      });
+          select: {
+            id: true,
+            category: true,
+          },
+        });
 
-      // Aggregate by category
-      const categoryTotals: Record<string, { count: number; amount: number }> =
-        {};
+        categoryData = salesData.map((sale) => {
+          const item = items.find((i) => i.id === sale.itemId);
+          return {
+            name: item?.category || "Uncategorized",
+            value: sale._sum.amount || 0,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            percentage: 0, // Will be calculated after
+            count: sale._count.id,
+          };
+        });
+        break;
 
-      salesByCategory.forEach((sale) => {
-        const category = sale.item.category || "Uncategorized";
-        if (!categoryTotals[category]) {
-          categoryTotals[category] = { count: 0, amount: 0 };
-        }
-        categoryTotals[category].count += 1;
-        categoryTotals[category].amount += sale.amount;
-      });
+      case "revenue":
+        // Get revenue data grouped by category
+        const revenueData = await prisma.sale.groupBy({
+          by: ["itemId"],
+          where: {
+            userId: user.id,
+          },
+          _sum: {
+            amount: true,
+          },
+        });
 
-      categoryData = Object.entries(categoryTotals)
-        .map(([name, data], index) => ({
-          name,
-          value: data.count,
-          count: data.count,
-          color: colors[index % colors.length],
-        }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 8);
-    } else if (type === "revenue") {
-      // Get revenue by inventory category
-      const salesByCategory = await prisma.sale.findMany({
-        where: {
-          userId: user.id,
-        },
-        include: {
-          item: {
-            select: {
-              category: true,
+        // Get item details for each sale
+        const revenueItems = await prisma.inventory.findMany({
+          where: {
+            id: {
+              in: revenueData.map((sale) => sale.itemId),
             },
           },
-        },
-      });
+          select: {
+            id: true,
+            category: true,
+          },
+        });
 
-      // Aggregate revenue by category
-      const categoryRevenue: Record<
-        string,
-        { count: number; revenue: number }
-      > = {};
+        categoryData = revenueData.map((sale) => {
+          const item = revenueItems.find((i) => i.id === sale.itemId);
+          return {
+            name: item?.category || "Uncategorized",
+            value: sale._sum.amount || 0,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            percentage: 0, // Will be calculated after
+          };
+        });
+        break;
 
-      salesByCategory.forEach((sale) => {
-        const category = sale.item.category || "Uncategorized";
-        if (!categoryRevenue[category]) {
-          categoryRevenue[category] = { count: 0, revenue: 0 };
-        }
-        categoryRevenue[category].count += 1;
-        categoryRevenue[category].revenue += sale.amount;
-      });
-
-      categoryData = Object.entries(categoryRevenue)
-        .map(([name, data], index) => ({
-          name,
-          value: Math.round(data.revenue),
-          count: data.count,
-          color: colors[index % colors.length],
-        }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 8);
+      default:
+        return NextResponse.json(
+          { error: "Invalid type parameter" },
+          { status: 400 }
+        );
     }
 
-    // If no categories found, provide default data
-    if (categoryData.length === 0) {
-      categoryData = [{ name: "No Data", value: 0, color: colors[0] }];
-    }
-
-    // Calculate total for percentage calculations
+    // Calculate percentages
     const total = categoryData.reduce((sum, item) => sum + item.value, 0);
-
-    // Add percentage information
-    const dataWithPercentages = categoryData.map((item) => ({
+    categoryData = categoryData.map((item) => ({
       ...item,
-      percentage: total > 0 ? Math.round((item.value / total) * 100) : 0,
+      percentage: total === 0 ? 0 : Math.round((item.value / total) * 100),
     }));
 
     return NextResponse.json({
       success: true,
-      data: dataWithPercentages,
+      data: categoryData,
       type,
       summary: {
         totalCategories: categoryData.length,
@@ -162,10 +159,25 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Categories error:", error);
+    console.error("[CATEGORIES]", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     );
   }
+}
+
+// Helper function to generate random colors for the pie chart
+function getRandomColor() {
+  const colors = [
+    "#3b82f6", // blue
+    "#10b981", // emerald
+    "#f59e0b", // amber
+    "#ef4444", // red
+    "#8b5cf6", // violet
+    "#06b6d4", // cyan
+    "#f97316", // orange
+    "#84cc16", // lime
+  ];
+  return colors[Math.floor(Math.random() * colors.length)];
 }

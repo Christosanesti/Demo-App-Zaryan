@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
 const createCustomerSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email().optional(),
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email").optional().or(z.literal("")),
   phone: z.string().optional(),
   address: z.string().optional(),
   notes: z.string().optional(),
@@ -23,15 +23,25 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
+    // Ensure user exists in database
+    const dbUser = await prisma.user.upsert({
+      where: { id: user.id },
+      update: {},
+      create: {
+        id: user.id,
+        email: user.emailAddresses[0]?.emailAddress,
+        name: `${user.firstName} ${user.lastName}`.trim() || "User",
+      },
+    });
+
     const body = await req.json();
     const validatedData = createCustomerSchema.parse(body);
 
     const customer = await prisma.customer.create({
       data: {
         ...validatedData,
-        userId: user.id,
-        userName:
-          user.firstName || user.emailAddresses[0]?.emailAddress || "Unknown",
+        userId: dbUser.id,
+        userName: dbUser.name,
       },
     });
 
@@ -39,9 +49,21 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("[CUSTOMER_POST]", error);
     if (error instanceof z.ZodError) {
-      return new NextResponse("Invalid request data", { status: 400 });
+      return new NextResponse(
+        JSON.stringify({
+          error: "Validation error",
+          details: error.errors,
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
-    return new NextResponse("Internal error", { status: 500 });
+    return new NextResponse(
+      JSON.stringify({
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : "Unknown error",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
 

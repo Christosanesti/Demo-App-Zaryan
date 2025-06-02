@@ -82,6 +82,7 @@ const fetchOverviewData = async (): Promise<PerformanceData[]> => {
   const response = await fetch("/api/dashboard/overview");
   if (!response.ok) throw new Error("Failed to fetch overview data");
   const result = await response.json();
+  if (!result.data) throw new Error("No data received from server");
   return result.data;
 };
 
@@ -198,7 +199,7 @@ export default function DashboardCharts({ className }: DashboardChartsProps) {
           <p className="text-slate-200 font-medium">{`${label}`}</p>
           {payload.map((entry: any, index: number) => (
             <p key={index} className="text-sm" style={{ color: entry.color }}>
-              {`${entry.dataKey}: ${entry.value.toLocaleString()}`}
+              {`${entry.dataKey}: ${entry.value?.toLocaleString() ?? "N/A"}`}
             </p>
           ))}
         </div>
@@ -236,7 +237,7 @@ export default function DashboardCharts({ className }: DashboardChartsProps) {
                     <div>
                       <p className="text-sm text-slate-400">{item.metric}</p>
                       <p className="text-2xl font-bold text-slate-200">
-                        {item.current.toLocaleString()}
+                        {item.current?.toLocaleString() ?? "N/A"}
                       </p>
                     </div>
                     <div className="text-right">
@@ -253,7 +254,7 @@ export default function DashboardCharts({ className }: DashboardChartsProps) {
                         {item.percentage}%
                       </Badge>
                       <p className="text-xs text-slate-500 mt-1">
-                        of {item.target.toLocaleString()}
+                        of {item.target?.toLocaleString() ?? "N/A"}
                       </p>
                       {item.growth !== 0 && (
                         <div className="flex items-center gap-1 mt-1">

@@ -10,7 +10,7 @@ const nextConfig = {
     // your project has type errors.
     // ignoreBuildErrors: true,
   },
-  serverExternalPackages: ["@prisma/client", "prisma"],
+  serverExternalPackages: ["@prisma/client", "prisma", "@/generated/prisma"],
 };
 
 module.exports = nextConfig;

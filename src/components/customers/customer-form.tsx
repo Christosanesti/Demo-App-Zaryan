@@ -31,6 +31,9 @@ const formSchema = z.object({
   notes: z.string().optional(),
   type: z.enum(["individual", "company"]),
   status: z.enum(["active", "inactive"]),
+  guarantorName: z.string().optional(),
+  guarantorPhone: z.string().optional(),
+  guarantorAddress: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
