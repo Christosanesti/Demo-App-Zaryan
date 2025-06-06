@@ -1,6 +1,6 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "./prisma";
+import { currentUser } from "@clerk/nextjs/server";
 
 export async function getAuthUser() {
   const user = await currentUser();
@@ -36,3 +36,4 @@ export async function getAuthUser() {
     userSettings,
   };
 }
+

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LedgerEntryForm } from "../ledgers/_components/LedgerEntryForm";
 
 interface Props {
   type: TransactionType;
@@ -47,23 +48,7 @@ function CategoryPicker({ type, value, onChange }: Props) {
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [reference, setReference] = useState(value || "");
   const [selectedLedger, setSelectedLedger] = useState("");
-  const [customLedgerName, setCustomLedgerName] = useState("");
-  const [showCustomLedgerDialog, setShowCustomLedgerDialog] = useState(false);
-
-  const handleAddCustomLedger = () => {
-    if (customLedgerName.trim()) {
-      // Here you would typically make an API call to save the new ledger
-      DEFAULT_LEDGERS.push({
-        id: Date.now().toString(),
-        name: customLedgerName,
-      });
-      setSelectedLedger(customLedgerName);
-      onChange?.(customLedgerName);
-      setCustomLedgerName("");
-      setShowCustomLedgerDialog(false);
-      setLedgerOpen(false);
-    }
-  };
+  const [showLedgerForm, setShowLedgerForm] = useState(false);
 
   const handleReferenceChange = (newValue: string) => {
     setReference(newValue);
@@ -81,7 +66,7 @@ function CategoryPicker({ type, value, onChange }: Props) {
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="space-y-4">
       <Popover open={referenceOpen} onOpenChange={setReferenceOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -89,9 +74,7 @@ function CategoryPicker({ type, value, onChange }: Props) {
             variant={"outline"}
             role="combobox"
           >
-            {reference ?
-              REFERENCE_OPTIONS.find((ref) => ref.value === reference)?.label
-            : "Select Reference"}
+            {reference || "Select Reference Type"}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-0" align="start">
@@ -140,7 +123,8 @@ function CategoryPicker({ type, value, onChange }: Props) {
                   <CommandItem
                     value="add-custom"
                     onSelect={() => {
-                      setShowCustomLedgerDialog(true);
+                      setShowLedgerForm(true);
+                      setLedgerOpen(false);
                     }}
                   >
                     <div className="flex items-center gap-2">
@@ -155,30 +139,11 @@ function CategoryPicker({ type, value, onChange }: Props) {
         </Popover>
       )}
 
-      <Dialog
-        open={showCustomLedgerDialog}
-        onOpenChange={setShowCustomLedgerDialog}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Custom Ledger</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="ledger-name">Ledger Name</Label>
-              <Input
-                id="ledger-name"
-                value={customLedgerName}
-                onChange={(e) => setCustomLedgerName(e.target.value)}
-                placeholder="Enter ledger name"
-              />
-            </div>
-            <Button onClick={handleAddCustomLedger} className="w-full">
-              Add Ledger
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <LedgerEntryForm
+        open={showLedgerForm}
+        onClose={() => setShowLedgerForm(false)}
+        selectedType="CUSTOM"
+      />
     </div>
   );
 }

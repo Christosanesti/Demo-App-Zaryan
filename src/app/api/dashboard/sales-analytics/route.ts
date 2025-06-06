@@ -1,90 +1,88 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { z } from "zod";
 
-export async function GET(request: NextRequest) {
+const salesAnalyticsSchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+});
+
+export async function GET(req: Request) {
   try {
     const user = await currentUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const period = searchParams.get("period") || "6months";
+    const { searchParams } = new URL(req.url);
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
-    // Calculate date range based on period
-    const endDate = new Date();
-    let startDate = new Date();
+    const validatedData = salesAnalyticsSchema.parse({
+      from: from || undefined,
+      to: to || undefined,
+    });
 
-    switch (period) {
-      case "3months":
-        startDate.setMonth(startDate.getMonth() - 3);
-        break;
-      case "6months":
-        startDate.setMonth(startDate.getMonth() - 6);
-        break;
-      case "1year":
-        startDate.setFullYear(startDate.getFullYear() - 1);
-        break;
-      default:
-        startDate.setMonth(startDate.getMonth() - 6);
-    }
-
-    // Get sales data grouped by month
+    // Get sales data grouped by date
     const salesData = await prisma.sale.groupBy({
       by: ["date"],
       where: {
         userId: user.id,
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+        ...(validatedData.from && validatedData.to ?
+          {
+            date: {
+              gte: new Date(validatedData.from),
+              lte: new Date(validatedData.to),
+            },
+          }
+        : {}),
       },
       _sum: {
-        amount: true,
+        totalAmount: true,
       },
       _count: {
         id: true,
       },
     });
 
-    // Get customer counts for each month
+    // Get customer data for the same period
     const customerData = await prisma.customer.groupBy({
       by: ["createdAt"],
       where: {
         userId: user.id,
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
+        ...(validatedData.from && validatedData.to ?
+          {
+            createdAt: {
+              gte: new Date(validatedData.from),
+              lte: new Date(validatedData.to),
+            },
+          }
+        : {}),
       },
       _count: {
         id: true,
       },
     });
 
-    // Format data for the chart
+    // Format the data for the chart
     const formattedData = salesData.map((sale) => ({
-      month: sale.date.toLocaleDateString("en-US", {
+      date: sale.date.toLocaleDateString("en-US", {
         month: "short",
-        year: "numeric",
+        day: "numeric",
       }),
       sales: sale._count.id,
-      revenue: sale._sum.amount || 0,
+      revenue: sale._sum.totalAmount || 0,
       customers:
         customerData.find(
           (c) =>
-            c.createdAt.getMonth() === sale.date.getMonth() &&
-            c.createdAt.getFullYear() === sale.date.getFullYear()
+            c.createdAt.toLocaleDateString() === sale.date.toLocaleDateString()
         )?._count.id || 0,
     }));
 
     return NextResponse.json({ data: formattedData });
   } catch (error) {
-    console.error("[SALES_ANALYTICS]", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    console.error("[SALES_ANALYTICS_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
   }
 }

@@ -1,4 +1,4 @@
-import DaybookClient from "./_components/DaybookClient";
+import { DaybookClient } from "./_components/DaybookClient";
 
 export const dynamic = "force-dynamic";
 

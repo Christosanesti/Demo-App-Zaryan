@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -43,6 +43,7 @@ import {
   ExternalLink,
   Pencil,
   Trash,
+  AlertCircle,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -68,7 +69,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { User } from "@/generated/prisma";
-import { DaybookForm } from "@/components/daybook/daybook-form";
+import { DaybookForm } from "./DaybookForm";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -79,80 +80,63 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import CountUp from "react-countup";
+import { useDaybook } from "@/hooks/use-daybook";
+import { useAuth } from "@clerk/nextjs";
+import { redirect } from "next/navigation";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const formSchema = z.object({
   date: z.date(),
-  amount: z.number().positive(),
   type: z.enum(["income", "expense"]),
+  amount: z.number().positive("Amount must be greater than 0"),
   description: z.string().min(1, "Description is required"),
   reference: z.string().min(1, "Reference is required"),
   category: z.string().optional(),
   paymentMethod: z.enum(["cash", "bank", "mobile"]).optional(),
   status: z.enum(["completed", "pending", "cancelled"]).optional(),
-  attachments: z.string().optional(),
+  attachments: z.array(z.string()).optional(),
   notes: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-interface DaybookClientProps {}
-
-export default function DaybookClient({}: DaybookClientProps) {
+export function DaybookClient() {
+  const { isSignedIn } = useAuth();
   const { user } = useUser();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    new Date()
-  );
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [filters, setFilters] = useState({
     type: "",
     category: "",
     status: "",
   });
 
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const { data: entries, isLoading } = useQuery({
+    queryKey: ["daybook-entries"],
+    queryFn: async () => {
+      const res = await fetch("/api/daybook");
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+
+  const { summary, createEntry } = useDaybook();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    mode: "onChange",
     defaultValues: {
       date: new Date(),
-      amount: 0,
       type: "income",
+      amount: 0,
       description: "",
       reference: "",
       category: "uncategorized",
       paymentMethod: "cash",
       status: "completed",
-    },
-  });
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["daybook-entries", selectedDate],
-    queryFn: async () => {
-      const response = await fetch("/api/daybook");
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to fetch entries");
-      }
-      const data = await response.json();
-
-      // Calculate totals
-      const entries = data.entries || [];
-      const totals = {
-        income: entries
-          .filter((entry: any) => entry.type === "income")
-          .reduce((sum: number, entry: any) => sum + entry.amount, 0),
-        expense: entries
-          .filter((entry: any) => entry.type === "expense")
-          .reduce((sum: number, entry: any) => sum + entry.amount, 0),
-      };
-
-      return {
-        entries,
-        totals,
-      };
+      attachments: [],
     },
   });
 
@@ -212,6 +196,215 @@ export default function DaybookClient({}: DaybookClientProps) {
     },
   });
 
+  const { data: overdueData, isLoading: isLoadingOverdue } = useQuery({
+    queryKey: ["overdue-payments"],
+    queryFn: async () => {
+      const response = await fetch("/api/daybook/overdue");
+      if (!response.ok) {
+        throw new Error("Failed to fetch overdue payments");
+      }
+      const data = await response.json();
+      return data.overduePayments || [];
+    },
+  });
+
+  const markAsPaidMutation = useMutation({
+    mutationFn: async (entryId: string) => {
+      const response = await fetch(`/api/daybook/${entryId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to mark payment as paid");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["overdue-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["daybook-entries"] });
+      toast.success("Payment marked as paid", {
+        description: "The payment has been updated successfully.",
+      });
+    },
+    onError: (error) => {
+      toast.error("Failed to mark payment as paid", {
+        description: error.message,
+      });
+    },
+  });
+
+  // Memoized values
+  const safeSummary = useMemo(
+    () => ({
+      income: typeof summary?.income === "number" ? summary.income : 0,
+      expense: typeof summary?.expense === "number" ? summary.expense : 0,
+      balance: typeof summary?.balance === "number" ? summary.balance : 0,
+    }),
+    [summary]
+  );
+
+  const filteredEntries = useMemo(() => {
+    if (!Array.isArray(entries)) return [];
+
+    return entries.filter((entry: any) => {
+      const matchesSearch =
+        entry.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        entry.reference.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesDate =
+        selectedDate ?
+          format(new Date(entry.date), "yyyy-MM-dd") ===
+          format(selectedDate, "yyyy-MM-dd")
+        : true;
+
+      return matchesSearch && matchesDate;
+    });
+  }, [entries, searchQuery, selectedDate]);
+
+  const totalIncome = useMemo(
+    () =>
+      filteredEntries
+        .filter((entry: any) => entry.type === "income")
+        .reduce((sum: number, entry: any) => sum + entry.amount, 0),
+    [filteredEntries]
+  );
+
+  const totalExpenses = useMemo(
+    () =>
+      filteredEntries
+        .filter((entry: any) => entry.type === "expense")
+        .reduce((sum: number, entry: any) => sum + entry.amount, 0),
+    [filteredEntries]
+  );
+
+  const cashInHand = useMemo(
+    () => totalIncome - totalExpenses,
+    [totalIncome, totalExpenses]
+  );
+
+  // Group entries by date
+  const groupedEntries = useMemo(
+    () =>
+      filteredEntries.reduce((groups: any, entry: any) => {
+        const date = format(new Date(entry.date), "yyyy-MM-dd");
+        if (!groups[date]) {
+          groups[date] = [];
+        }
+        groups[date].push(entry);
+        return groups;
+      }, {}),
+    [filteredEntries]
+  );
+
+  // Sort dates
+  const sortedDates = useMemo(
+    () =>
+      Object.keys(groupedEntries).sort(
+        (a, b) => new Date(b).getTime() - new Date(a).getTime()
+      ),
+    [groupedEntries]
+  );
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen p-6">
+        <div className="max-w-7xl mx-auto space-y-8">
+          {/* Header Skeleton */}
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-transparent to-purple-500/5 rounded-2xl" />
+            <div className="relative bg-slate-800/40 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="space-y-3">
+                  <Skeleton className="h-10 w-48" />
+                  <Skeleton className="h-6 w-72" />
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-6 w-24" />
+                    <Skeleton className="h-6 w-16" />
+                  </div>
+                </div>
+                <Skeleton className="h-10 w-32" />
+              </div>
+            </div>
+          </div>
+
+          {/* Summary Cards Skeleton */}
+          <div className="grid gap-6 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card
+                key={i}
+                className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50"
+              >
+                <CardHeader>
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-24" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Search and Filter Skeleton */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Skeleton className="h-10 flex-1" />
+            <Skeleton className="h-10 w-[240px]" />
+          </div>
+
+          {/* Entries List Skeleton */}
+          <div className="space-y-8">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-6 w-48" />
+                  <Skeleton className="h-6 w-24" />
+                </div>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Card
+                      key={i}
+                      className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50"
+                    >
+                      <CardHeader>
+                        <Skeleton className="h-6 w-3/4" />
+                        <Skeleton className="h-4 w-1/2" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-2/3" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const onSubmit = async (values: FormValues) => {
+    try {
+      await createEntry({
+        ...values,
+        paymentMethod:
+          values.paymentMethod === "mobile" ? "mobileI" : values.paymentMethod,
+      });
+      setIsSheetOpen(false);
+      form.reset();
+    } catch (err) {
+      console.error("Failed to create entry:", err);
+      toast.error("Failed to create entry");
+    }
+  };
+
   const handleDateChange = (days: number) => {
     setSelectedDate((prev) => addDays(prev ?? new Date(), days));
   };
@@ -233,61 +426,6 @@ export default function DaybookClient({}: DaybookClientProps) {
     // TODO: Implement edit functionality
     toast.info("Edit functionality coming soon");
   };
-
-  const filteredEntries =
-    Array.isArray(data?.entries) ?
-      data.entries.filter((entry: any) => {
-        const matchesSearch =
-          entry.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          entry.reference.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesDate =
-          selectedDate ?
-            format(new Date(entry.date), "yyyy-MM-dd") ===
-            format(selectedDate, "yyyy-MM-dd")
-          : true;
-        return matchesSearch && matchesDate;
-      })
-    : [];
-
-  const totalIncome = filteredEntries
-    .filter((entry: any) => entry.type === "income")
-    .reduce((sum: number, entry: any) => sum + entry.amount, 0);
-
-  const totalExpenses = filteredEntries
-    .filter((entry: any) => entry.type === "expense")
-    .reduce((sum: number, entry: any) => sum + entry.amount, 0);
-
-  const cashInHand = totalIncome - totalExpenses;
-
-  // Group entries by date for better organization
-  const groupedEntries = filteredEntries.reduce((groups: any, entry: any) => {
-    const date = format(new Date(entry.date), "yyyy-MM-dd");
-    if (!groups[date]) {
-      groups[date] = [];
-    }
-    groups[date].push(entry);
-    return groups;
-  }, {});
-
-  // Sort dates in descending order
-  const sortedDates = Object.keys(groupedEntries).sort(
-    (a, b) => new Date(b).getTime() - new Date(a).getTime()
-  );
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-        <p className="text-red-400">Error loading entries</p>
-        <Button
-          onClick={() =>
-            queryClient.invalidateQueries({ queryKey: ["daybook-entries"] })
-          }
-        >
-          Retry
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen p-6">
@@ -369,6 +507,94 @@ export default function DaybookClient({}: DaybookClientProps) {
             </div>
           </div>
         </div>
+
+        {/* Overdue Payments Section */}
+        {!isLoadingOverdue && overdueData && overdueData.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <Alert className="bg-red-500/10 border-red-500/20 text-red-400">
+              <AlertCircle className="h-5 w-5" />
+              <AlertTitle className="text-lg font-semibold">
+                Payments Overdue ({overdueData.length})
+              </AlertTitle>
+              <AlertDescription>
+                <div className="mt-4 space-y-4">
+                  {overdueData.map((payment: any) => (
+                    <motion.div
+                      key={payment.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      className="flex items-center justify-between p-4 bg-red-500/5 rounded-lg border border-red-500/10 hover:bg-red-500/10 transition-colors"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-red-300">
+                            {payment.customer?.name || "Unknown Customer"}
+                          </p>
+                          <Badge
+                            variant="outline"
+                            className="border-red-500/30 text-red-400"
+                          >
+                            {payment.reference}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-red-300/70">Due Date</p>
+                            <p className="text-red-300">
+                              {format(new Date(payment.dueDate), "PPP")}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-red-300/70">Amount</p>
+                            <p className="text-red-300 font-medium">
+                              <CountUp
+                                end={payment.amount}
+                                decimals={2}
+                                prefix="$"
+                                duration={1}
+                                separator=","
+                              />
+                            </p>
+                          </div>
+                        </div>
+                        {payment.description && (
+                          <p className="text-sm text-red-300/70">
+                            {payment.description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-red-500/30 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "Are you sure you want to mark this payment as paid?"
+                              )
+                            ) {
+                              markAsPaidMutation.mutate(payment.id);
+                            }
+                          }}
+                        >
+                          {markAsPaidMutation.isPending ?
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          : "Mark as Paid"}
+                        </Button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
 
         {/* Summary Cards */}
         <div className="grid gap-6 md:grid-cols-3">

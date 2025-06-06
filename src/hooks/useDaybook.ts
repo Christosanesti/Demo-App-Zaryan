@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useMemo } from "react";
 
 interface DaybookEntry {
   id: string;
@@ -33,9 +34,29 @@ export function useDaybook() {
       if (!response.ok) {
         throw new Error("Failed to fetch entries");
       }
-      return response.json();
+      const data = await response.json();
+      return data.entries || [];
     },
   });
+
+  // Calculate summary
+  const summary = useMemo(() => {
+    if (!entries) return { income: 0, expense: 0, balance: 0 };
+
+    const income = entries
+      .filter((entry) => entry.type === "income")
+      .reduce((sum, entry) => sum + entry.amount, 0);
+
+    const expense = entries
+      .filter((entry) => entry.type === "expense")
+      .reduce((sum, entry) => sum + entry.amount, 0);
+
+    return {
+      income,
+      expense,
+      balance: income - expense,
+    };
+  }, [entries]);
 
   // Create entry
   const createEntry = useMutation({
@@ -117,6 +138,7 @@ export function useDaybook() {
 
   return {
     entries,
+    summary,
     isLoading,
     createEntry,
     updateEntry,

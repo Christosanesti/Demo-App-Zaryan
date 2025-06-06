@@ -1,170 +1,122 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { db } from "@/lib/db";
 
-export async function GET(request: NextRequest) {
+const categoriesSchema = z.object({
+  type: z.enum(["sales", "inventory"]).default("sales"),
+  from: z.string().optional(),
+  to: z.string().optional(),
+});
+
+export async function GET(req: Request) {
   try {
     const user = await currentUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const type = searchParams.get("type") || "inventory"; // inventory, sales, revenue
+    const { searchParams } = new URL(req.url);
+    const type = searchParams.get("type") || "sales";
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
-    let categoryData: Array<{
-      name: string;
-      value: number;
-      color: string;
-      count?: number;
-      percentage: number;
-    }> = [];
-
-    // Color palette for categories
-    const colors = [
-      "#8884d8", // Purple
-      "#82ca9d", // Green
-      "#ffc658", // Yellow
-      "#ff7c7c", // Red
-      "#8dd1e1", // Cyan
-      "#d084d0", // Pink
-      "#87d068", // Light Green
-      "#ffb347", // Orange
-    ];
-
-    switch (type) {
-      case "inventory":
-        // Get inventory items grouped by category
-        const inventoryData = await prisma.inventory.groupBy({
-          by: ["category"],
-          where: {
-            userId: user.id,
-          },
-          _sum: {
-            quantity: true,
-          },
-          _count: {
-            id: true,
-          },
-        });
-
-        categoryData = inventoryData.map((item) => ({
-          name: item.category || "Uncategorized",
-          value: item._sum.quantity || 0,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          percentage: 0, // Will be calculated after
-          count: item._count.id,
-        }));
-        break;
-
-      case "sales":
-        // Get sales data grouped by category
-        const salesData = await prisma.sale.groupBy({
-          by: ["itemId"],
-          where: {
-            userId: user.id,
-          },
-          _sum: {
-            amount: true,
-          },
-          _count: {
-            id: true,
-          },
-        });
-
-        // Get item details for each sale
-        const items = await prisma.inventory.findMany({
-          where: {
-            id: {
-              in: salesData.map((sale) => sale.itemId),
-            },
-          },
-          select: {
-            id: true,
-            category: true,
-          },
-        });
-
-        categoryData = salesData.map((sale) => {
-          const item = items.find((i) => i.id === sale.itemId);
-          return {
-            name: item?.category || "Uncategorized",
-            value: sale._sum.amount || 0,
-            color: colors[Math.floor(Math.random() * colors.length)],
-            percentage: 0, // Will be calculated after
-            count: sale._count.id,
-          };
-        });
-        break;
-
-      case "revenue":
-        // Get revenue data grouped by category
-        const revenueData = await prisma.sale.groupBy({
-          by: ["itemId"],
-          where: {
-            userId: user.id,
-          },
-          _sum: {
-            amount: true,
-          },
-        });
-
-        // Get item details for each sale
-        const revenueItems = await prisma.inventory.findMany({
-          where: {
-            id: {
-              in: revenueData.map((sale) => sale.itemId),
-            },
-          },
-          select: {
-            id: true,
-            category: true,
-          },
-        });
-
-        categoryData = revenueData.map((sale) => {
-          const item = revenueItems.find((i) => i.id === sale.itemId);
-          return {
-            name: item?.category || "Uncategorized",
-            value: sale._sum.amount || 0,
-            color: colors[Math.floor(Math.random() * colors.length)],
-            percentage: 0, // Will be calculated after
-          };
-        });
-        break;
-
-      default:
-        return NextResponse.json(
-          { error: "Invalid type parameter" },
-          { status: 400 }
-        );
-    }
-
-    // Calculate percentages
-    const total = categoryData.reduce((sum, item) => sum + item.value, 0);
-    categoryData = categoryData.map((item) => ({
-      ...item,
-      percentage: total === 0 ? 0 : Math.round((item.value / total) * 100),
-    }));
-
-    return NextResponse.json({
-      success: true,
-      data: categoryData,
+    const validatedData = categoriesSchema.parse({
       type,
-      summary: {
-        totalCategories: categoryData.length,
-        totalValue: total,
-        topCategory: categoryData[0]?.name || "None",
-      },
-      timestamp: new Date().toISOString(),
+      from: from || undefined,
+      to: to || undefined,
     });
+
+    if (validatedData.type === "sales") {
+      // Get sales data by category
+      const salesByCategory = await db.sale.groupBy({
+        by: ["category"],
+        where: {
+          userId: user.id,
+          ...(validatedData.from && validatedData.to ?
+            {
+              date: {
+                gte: new Date(validatedData.from),
+                lte: new Date(validatedData.to),
+              },
+            }
+          : {}),
+        },
+        _sum: {
+          totalAmount: true,
+        },
+        _count: {
+          id: true,
+        },
+      });
+
+      // Calculate total sales for percentage
+      const totalSales = salesByCategory.reduce(
+        (sum, category) => sum + (category._sum.totalAmount || 0),
+        0
+      );
+
+      // Format data for the chart
+      const formattedData = salesByCategory.map((category) => ({
+        name: category.category,
+        value: category._sum.totalAmount || 0,
+        color: getCategoryColor(category.category),
+        percentage: ((category._sum.totalAmount || 0) / totalSales) * 100,
+        count: category._count.id,
+      }));
+
+      return NextResponse.json({ data: formattedData });
+    } else {
+      // Get inventory data by category
+      const inventoryByCategory = await db.inventory.groupBy({
+        by: ["category"],
+        where: {
+          userId: user.id,
+        },
+        _sum: {
+          value: true,
+          quantity: true,
+        },
+        _count: {
+          id: true,
+        },
+      });
+
+      // Calculate total inventory value for percentage
+      const totalValue = inventoryByCategory.reduce(
+        (sum, category) => sum + (category._sum.value || 0),
+        0
+      );
+
+      // Format data for the chart
+      const formattedData = inventoryByCategory.map((category) => ({
+        name: category.category,
+        value: category._sum.value || 0,
+        color: getCategoryColor(category.category),
+        percentage: ((category._sum.value || 0) / totalValue) * 100,
+        count: category._count.id,
+      }));
+
+      return NextResponse.json({ data: formattedData });
+    }
   } catch (error) {
-    console.error("[CATEGORIES]", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    console.error("[CATEGORIES_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
   }
+}
+
+// Helper function to assign consistent colors to categories
+function getCategoryColor(category: string): string {
+  const colors = {
+    Electronics: "#3B82F6",
+    Clothing: "#10B981",
+    "Food & Beverage": "#F59E0B",
+    "Home Goods": "#8B5CF6",
+    Others: "#EC4899",
+  };
+
+  return colors[category as keyof typeof colors] || "#6B7280";
 }
 
 // Helper function to generate random colors for the pie chart

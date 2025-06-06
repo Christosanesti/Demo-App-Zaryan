@@ -31,6 +31,8 @@ import {
   LineChart as LineChartIcon,
   AreaChart as AreaChartIcon,
   RefreshCw,
+  Activity,
+  Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,9 @@ import {
   PerformanceCardsSkeleton,
   ChartSkeleton,
 } from "@/components/ui/skeleton-wrapper";
+import { motion } from "framer-motion";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface PerformanceData {
   metric: string;
@@ -71,6 +76,20 @@ interface CategoryData {
   color: string;
   percentage: number;
   count?: number;
+}
+
+interface ChartDataItem {
+  date: string;
+  sales?: number;
+  customers?: number;
+  value: number;
+  name: string;
+  color: string;
+  percentage: number;
+}
+
+interface ApiResponse {
+  data: ChartDataItem[];
 }
 
 interface DashboardChartsProps {
@@ -109,463 +128,431 @@ const fetchCategoryData = async (
 ): Promise<CategoryData[]> => {
   const response = await fetch(`/api/dashboard/categories?type=${type}`);
   if (!response.ok) throw new Error("Failed to fetch category data");
-  const result = await response.json();
-  return result.data;
+  const data = await response.json();
+  return (data as ApiResponse).data;
 };
 
-export default function DashboardCharts({ className }: DashboardChartsProps) {
-  const [activeChart, setActiveChart] = useState("overview");
-  const [salesPeriod, setSalesPeriod] = useState("6months");
-  const [categoryType, setCategoryType] = useState("inventory");
-
-  // React Query hooks for data fetching
-  const {
-    data: performanceData,
-    isLoading: performanceLoading,
-    error: performanceError,
-    refetch: refetchPerformance,
-  } = useQuery({
-    queryKey: ["dashboard-overview"],
-    queryFn: fetchOverviewData,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: 2,
-    refetchOnWindowFocus: false,
-  });
-
-  const {
-    data: salesData,
-    isLoading: salesLoading,
-    error: salesError,
-    refetch: refetchSales,
-  } = useQuery({
-    queryKey: ["sales-analytics", salesPeriod],
-    queryFn: () => fetchSalesAnalytics(salesPeriod),
-    staleTime: 5 * 60 * 1000,
-    retry: 2,
-    refetchOnWindowFocus: false,
-  });
-
-  const {
-    data: dailyStats,
-    isLoading: dailyLoading,
-    error: dailyError,
-    refetch: refetchDaily,
-  } = useQuery({
-    queryKey: ["daily-stats"],
-    queryFn: fetchDailyStats,
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    retry: 2,
-    refetchOnWindowFocus: false,
-  });
-
-  const {
-    data: categoryData,
-    isLoading: categoryLoading,
-    error: categoryError,
-    refetch: refetchCategory,
-  } = useQuery({
-    queryKey: ["category-data", categoryType],
-    queryFn: () => fetchCategoryData(categoryType),
-    staleTime: 5 * 60 * 1000,
-    retry: 2,
-    refetchOnWindowFocus: false,
-  });
-
-  // Determine overall loading state
-  const isAnyLoading =
-    performanceLoading || salesLoading || dailyLoading || categoryLoading;
-  const hasAnyError =
-    performanceError || salesError || dailyError || categoryError;
-
-  const handleRefreshAll = () => {
-    Promise.all([
-      refetchPerformance(),
-      refetchSales(),
-      refetchDaily(),
-      refetchCategory(),
-    ])
-      .then(() => {
-        toast.success("Dashboard data refreshed!");
-      })
-      .catch(() => {
-        toast.error("Failed to refresh data");
-      });
-  };
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-xl">
-          <p className="text-slate-200 font-medium">{`${label}`}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} className="text-sm" style={{ color: entry.color }}>
-              {`${entry.dataKey}: ${entry.value?.toLocaleString() ?? "N/A"}`}
-            </p>
-          ))}
+// Custom tooltip component for better data visualization
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="rounded-lg border border-slate-700/50 bg-slate-900/95 backdrop-blur-sm p-3 shadow-lg">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col">
+            <span className="text-[0.70rem] uppercase text-slate-400">
+              {label}
+            </span>
+            <span className="font-bold text-slate-200">
+              {payload[0].value.toLocaleString()}
+            </span>
+          </div>
+          {payload[1] && (
+            <div className="flex flex-col">
+              <span className="text-[0.70rem] uppercase text-slate-400">
+                Customers
+              </span>
+              <span className="font-bold text-slate-200">
+                {payload[1].value.toLocaleString()}
+              </span>
+            </div>
+          )}
         </div>
-      );
-    }
-    return null;
-  };
+      </div>
+    );
+  }
+  return null;
+};
 
-  // Simple chart skeleton component
-  const SimpleChartSkeleton = () => (
-    <div className="h-80 w-full flex items-center justify-center">
-      <div className="w-full h-full bg-slate-700/20 rounded-lg animate-pulse" />
-    </div>
-  );
+// Generate random data for demonstration
+const generateRandomData = (days: number) => {
+  const data = [];
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    data.push({
+      date: date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      }),
+      sales: Math.floor(Math.random() * 1000) + 500,
+      revenue: Math.floor(Math.random() * 5000) + 2000,
+      customers: Math.floor(Math.random() * 50) + 20,
+    });
+  }
+  return data;
+};
+
+// Categories data with real-world business categories
+const categoriesData = [
+  { name: "Electronics", value: 35, color: "#3B82F6" },
+  { name: "Clothing", value: 25, color: "#10B981" },
+  { name: "Food & Beverage", value: 20, color: "#F59E0B" },
+  { name: "Home Goods", value: 15, color: "#8B5CF6" },
+  { name: "Others", value: 5, color: "#EC4899" },
+];
+
+export const DashboardCharts = () => {
+  const [activeChart, setActiveChart] = useState("overview");
+  const [timeRange, setTimeRange] = useState("7d");
+  const [liveMode, setLiveMode] = useState(false);
+
+  // Fetch overview data
+  const { data: overviewData, isLoading: isLoadingOverview } = useQuery({
+    queryKey: ["dashboard-overview", timeRange],
+    queryFn: async () => {
+      const from = new Date();
+      from.setDate(from.getDate() - (timeRange === "7d" ? 7 : 30));
+      const response = await fetch(
+        `/api/dashboard/overview?from=${from.toISOString()}&to=${new Date().toISOString()}`
+      );
+      if (!response.ok) throw new Error("Failed to fetch overview data");
+      const data = (await response.json()) as ApiResponse;
+      // Ensure dates are properly formatted
+      if (!data || !Array.isArray(data.data)) {
+        return { data: [] };
+      }
+      return {
+        ...data,
+        data: data.data.map((item) => ({
+          ...item,
+          date: new Date(item.date).toISOString(),
+        })),
+      };
+    },
+    refetchInterval: liveMode ? 5000 : false,
+  });
+
+  // Fetch sales analytics data
+  const { data: salesData, isLoading: isLoadingSales } = useQuery({
+    queryKey: ["dashboard-sales", timeRange],
+    queryFn: async () => {
+      const from = new Date();
+      from.setDate(from.getDate() - (timeRange === "7d" ? 7 : 30));
+      const response = await fetch(
+        `/api/dashboard/sales-analytics?from=${from.toISOString()}&to=${new Date().toISOString()}`
+      );
+      if (!response.ok) throw new Error("Failed to fetch sales data");
+      const data = (await response.json()) as ApiResponse;
+      // Ensure dates are properly formatted
+      return {
+        ...data,
+        data: data.data.map((item) => ({
+          ...item,
+          date: new Date(item.date).toISOString(),
+        })),
+      };
+    },
+    refetchInterval: liveMode ? 5000 : false,
+  });
+
+  // Fetch category data
+  const { data: categoryData, isLoading: isLoadingCategories } = useQuery({
+    queryKey: ["dashboard-categories", timeRange],
+    queryFn: async () => {
+      const from = new Date();
+      from.setDate(from.getDate() - (timeRange === "7d" ? 7 : 30));
+      const response = await fetch(
+        `/api/dashboard/categories?from=${from.toISOString()}&to=${new Date().toISOString()}`
+      );
+      if (!response.ok) throw new Error("Failed to fetch category data");
+      const data = await response.json();
+      return data as ApiResponse;
+    },
+    refetchInterval: liveMode ? 5000 : false,
+  });
+
+  const isLoading = isLoadingOverview || isLoadingSales || isLoadingCategories;
 
   return (
-    <div className={`space-y-6 ${className}`}>
-      {/* Performance Overview Cards */}
-      <SkeletonWrapper
-        loading={performanceLoading}
-        skeleton={<PerformanceCardsSkeleton />}
-      >
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {performanceError ?
-            <div className="col-span-full text-center text-red-400">
-              Failed to load performance data
-            </div>
-          : performanceData?.map((item, index) => (
-              <Card
-                key={item.metric}
-                className="bg-slate-800/50 border-slate-700/50"
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-400">{item.metric}</p>
-                      <p className="text-2xl font-bold text-slate-200">
-                        {item.current?.toLocaleString() ?? "N/A"}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <Badge
-                        variant={
-                          item.percentage >= 85 ? "default" : "secondary"
-                        }
-                        className={`${
-                          item.percentage >= 85 ?
-                            "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                          : "bg-orange-500/20 text-orange-400 border-orange-500/30"
-                        }`}
-                      >
-                        {item.percentage}%
-                      </Badge>
-                      <p className="text-xs text-slate-500 mt-1">
-                        of {item.target?.toLocaleString() ?? "N/A"}
-                      </p>
-                      {item.growth !== 0 && (
-                        <div className="flex items-center gap-1 mt-1">
-                          {item.trend === "up" ?
-                            <TrendingUp className="w-3 h-3 text-emerald-400" />
-                          : <TrendingDown className="w-3 h-3 text-red-400" />}
-                          <span
-                            className={`text-xs ${
-                              item.trend === "up" ?
-                                "text-emerald-400"
-                              : "text-red-400"
-                            }`}
-                          >
-                            {Math.abs(item.growth)}%
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          }
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button
+            variant={timeRange === "7d" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setTimeRange("7d")}
+            className="bg-slate-800/50 hover:bg-slate-700/50"
+          >
+            7D
+          </Button>
+          <Button
+            variant={timeRange === "30d" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setTimeRange("30d")}
+            className="bg-slate-800/50 hover:bg-slate-700/50"
+          >
+            30D
+          </Button>
         </div>
-      </SkeletonWrapper>
-
-      {/* Charts Section */}
-      <div>
-        <Card className="bg-slate-800/50 border-slate-700/50">
-          <CardHeader className="border-b border-slate-700/50">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-slate-200 flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-blue-400" />
-                  Business Analytics
-                </CardTitle>
-                <p className="text-sm text-slate-400 mt-1">
-                  Real-time view of your business performance
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRefreshAll}
-                  className="border-slate-600 hover:bg-slate-700"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </Button>
-                <Badge
-                  variant="outline"
-                  className="text-emerald-400 border-emerald-500/30"
-                >
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  Live Data
-                </Badge>
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-6">
-            <Tabs
-              value={activeChart}
-              onValueChange={setActiveChart}
-              className="space-y-6"
-            >
-              <TabsList className="bg-slate-800 border-slate-600">
-                <TabsTrigger
-                  value="overview"
-                  className="data-[state=active]:bg-slate-700"
-                >
-                  <AreaChartIcon className="w-4 h-4 mr-2" />
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="sales"
-                  className="data-[state=active]:bg-slate-700"
-                >
-                  <LineChartIcon className="w-4 h-4 mr-2" />
-                  Sales Trend
-                </TabsTrigger>
-                <TabsTrigger
-                  value="daily"
-                  className="data-[state=active]:bg-slate-700"
-                >
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Daily Stats
-                </TabsTrigger>
-                <TabsTrigger
-                  value="categories"
-                  className="data-[state=active]:bg-slate-700"
-                >
-                  <PieChartIcon className="w-4 h-4 mr-2" />
-                  Categories
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="overview" className="space-y-4">
-                {salesLoading ?
-                  <SimpleChartSkeleton />
-                : salesError || !salesData ?
-                  <div className="h-80 flex items-center justify-center text-slate-400">
-                    Failed to load sales data
-                  </div>
-                : <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={salesData}>
-                        <defs>
-                          <linearGradient
-                            id="salesGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                          >
-                            <stop
-                              offset="5%"
-                              stopColor="#3b82f6"
-                              stopOpacity={0.3}
-                            />
-                            <stop
-                              offset="95%"
-                              stopColor="#3b82f6"
-                              stopOpacity={0}
-                            />
-                          </linearGradient>
-                          <linearGradient
-                            id="revenueGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                          >
-                            <stop
-                              offset="5%"
-                              stopColor="#10b981"
-                              stopOpacity={0.3}
-                            />
-                            <stop
-                              offset="95%"
-                              stopColor="#10b981"
-                              stopOpacity={0}
-                            />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis dataKey="month" stroke="#9ca3af" />
-                        <YAxis stroke="#9ca3af" />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                        <Area
-                          type="monotone"
-                          dataKey="sales"
-                          stroke="#3b82f6"
-                          fill="url(#salesGradient)"
-                          strokeWidth={2}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="revenue"
-                          stroke="#10b981"
-                          fill="url(#revenueGradient)"
-                          strokeWidth={2}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                }
-              </TabsContent>
-
-              <TabsContent value="sales" className="space-y-4">
-                {salesLoading ?
-                  <SimpleChartSkeleton />
-                : salesError || !salesData ?
-                  <div className="h-80 flex items-center justify-center text-slate-400">
-                    Failed to load sales data
-                  </div>
-                : <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={salesData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis dataKey="month" stroke="#9ca3af" />
-                        <YAxis stroke="#9ca3af" />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="sales"
-                          stroke="#3b82f6"
-                          strokeWidth={3}
-                          dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
-                          activeDot={{
-                            r: 6,
-                            stroke: "#3b82f6",
-                            strokeWidth: 2,
-                          }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="customers"
-                          stroke="#f59e0b"
-                          strokeWidth={3}
-                          dot={{ fill: "#f59e0b", strokeWidth: 2, r: 4 }}
-                          activeDot={{
-                            r: 6,
-                            stroke: "#f59e0b",
-                            strokeWidth: 2,
-                          }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                }
-              </TabsContent>
-
-              <TabsContent value="daily" className="space-y-4">
-                {dailyLoading ?
-                  <SimpleChartSkeleton />
-                : dailyError || !dailyStats ?
-                  <div className="h-80 flex items-center justify-center text-slate-400">
-                    Failed to load daily statistics
-                  </div>
-                : <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={dailyStats}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis dataKey="day" stroke="#9ca3af" />
-                        <YAxis stroke="#9ca3af" />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                        <Bar
-                          dataKey="orders"
-                          fill="#8b5cf6"
-                          radius={[4, 4, 0, 0]}
-                          name="Orders"
-                        />
-                        <Bar
-                          dataKey="revenue"
-                          fill="#06b6d4"
-                          radius={[4, 4, 0, 0]}
-                          name="Revenue"
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                }
-              </TabsContent>
-
-              <TabsContent value="categories" className="space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <Button
-                    variant={
-                      categoryType === "inventory" ? "default" : "outline"
-                    }
-                    size="sm"
-                    onClick={() => setCategoryType("inventory")}
-                  >
-                    Inventory
-                  </Button>
-                  <Button
-                    variant={categoryType === "sales" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setCategoryType("sales")}
-                  >
-                    Sales
-                  </Button>
-                  <Button
-                    variant={categoryType === "revenue" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setCategoryType("revenue")}
-                  >
-                    Revenue
-                  </Button>
-                </div>
-                {categoryLoading ?
-                  <SimpleChartSkeleton />
-                : categoryError || !categoryData ?
-                  <div className="h-80 flex items-center justify-center text-slate-400">
-                    Failed to load category data
-                  </div>
-                : <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={categoryData}
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={120}
-                          fill="#8884d8"
-                          dataKey="value"
-                          label={({ name, percentage }) =>
-                            `${name} ${percentage}%`
-                          }
-                          labelLine={false}
-                        >
-                          {categoryData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                }
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+        <Button
+          variant={liveMode ? "default" : "outline"}
+          size="sm"
+          onClick={() => setLiveMode(!liveMode)}
+          className={cn(
+            "gap-2",
+            liveMode ?
+              "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30"
+            : "bg-slate-800/50 hover:bg-slate-700/50"
+          )}
+        >
+          <Zap className={cn("h-4 w-4", liveMode && "animate-pulse")} />
+          {liveMode ? "Live" : "Static"}
+        </Button>
       </div>
+
+      <Tabs value={activeChart} onValueChange={setActiveChart}>
+        <TabsList className="grid w-full grid-cols-3 bg-slate-800/50">
+          <TabsTrigger
+            value="overview"
+            className="gap-2 data-[state=active]:bg-slate-700/50"
+          >
+            <Activity className="h-4 w-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger
+            value="sales"
+            className="gap-2 data-[state=active]:bg-slate-700/50"
+          >
+            <BarChart3 className="h-4 w-4" />
+            Sales
+          </TabsTrigger>
+          <TabsTrigger
+            value="categories"
+            className="gap-2 data-[state=active]:bg-slate-700/50"
+          >
+            <PieChartIcon className="h-4 w-4" />
+            Categories
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-4">
+          <Card className="bg-slate-800/50 border-slate-700/50">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold text-slate-200">
+                Performance Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ?
+                <div className="h-[400px] animate-pulse bg-slate-800/50 rounded-lg" />
+              : <ResponsiveContainer width="100%" height={400}>
+                  <AreaChart data={overviewData?.data || []}>
+                    <defs>
+                      <linearGradient
+                        id="colorSales"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#3B82F6"
+                          stopOpacity={0.8}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#3B82F6"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                      <linearGradient
+                        id="colorCustomers"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#10B981"
+                          stopOpacity={0.8}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#10B981"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis
+                      dataKey="date"
+                      stroke="#6B7280"
+                      tickFormatter={(value) => {
+                        try {
+                          return format(new Date(value), "MMM d");
+                        } catch (error) {
+                          return value;
+                        }
+                      }}
+                      tick={{ fill: "#6B7280" }}
+                    />
+                    <YAxis
+                      stroke="#6B7280"
+                      tick={{ fill: "#6B7280" }}
+                      tickFormatter={(value) => value.toLocaleString()}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="sales"
+                      stroke="#3B82F6"
+                      fillOpacity={1}
+                      fill="url(#colorSales)"
+                      strokeWidth={2}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="customers"
+                      stroke="#10B981"
+                      fillOpacity={1}
+                      fill="url(#colorCustomers)"
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              }
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="sales" className="mt-4">
+          <Card className="bg-slate-800/50 border-slate-700/50">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold text-slate-200">
+                Sales Analytics
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ?
+                <div className="h-[400px] animate-pulse bg-slate-800/50 rounded-lg" />
+              : <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={salesData?.data || []}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis
+                      dataKey="date"
+                      stroke="#6B7280"
+                      tickFormatter={(value) => {
+                        try {
+                          return format(new Date(value), "MMM d");
+                        } catch (error) {
+                          return value;
+                        }
+                      }}
+                      tick={{ fill: "#6B7280" }}
+                    />
+                    <YAxis
+                      stroke="#6B7280"
+                      tick={{ fill: "#6B7280" }}
+                      tickFormatter={(value) => value.toLocaleString()}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar
+                      dataKey="sales"
+                      fill="#3B82F6"
+                      radius={[4, 4, 0, 0]}
+                      className="hover:opacity-80 transition-opacity"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              }
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="categories" className="mt-4">
+          <Card className="bg-slate-800/50 border-slate-700/50">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold text-slate-200">
+                Category Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ?
+                <div className="h-[400px] animate-pulse bg-slate-800/50 rounded-lg" />
+              : <div className="grid grid-cols-2 gap-4">
+                  <ResponsiveContainer width="100%" height={400}>
+                    <PieChart>
+                      <Pie
+                        data={categoryData?.data || []}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {(categoryData?.data || []).map(
+                          (entry: any, index: number) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={entry.color}
+                              className="hover:opacity-80 transition-opacity"
+                            />
+                          )
+                        )}
+                      </Pie>
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="rounded-lg border border-slate-700/50 bg-slate-900/95 backdrop-blur-sm p-3 shadow-lg">
+                                <p className="font-medium text-slate-200">
+                                  {payload[0].name}
+                                </p>
+                                <p className="text-sm text-slate-400">
+                                  {payload[0].value?.toLocaleString() ?? 0} (
+                                  {payload[0].payload?.percentage?.toFixed(1) ??
+                                    0}
+                                  %)
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="space-y-4">
+                    {(categoryData?.data || []).map(
+                      (category: any, index: number) => (
+                        <motion.div
+                          key={category.name}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="flex items-center justify-between rounded-lg border border-slate-700/50 bg-slate-800/50 p-4 hover:bg-slate-700/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="h-3 w-3 rounded-full"
+                              style={{ backgroundColor: category.color }}
+                            />
+                            <span className="font-medium text-slate-200">
+                              {category.name}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium text-slate-200">
+                              {category.value.toLocaleString()}
+                            </p>
+                            <p className="text-sm text-slate-400">
+                              {category.percentage.toFixed(1)}%
+                            </p>
+                          </div>
+                        </motion.div>
+                      )
+                    )}
+                  </div>
+                </div>
+              }
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
-}
+};

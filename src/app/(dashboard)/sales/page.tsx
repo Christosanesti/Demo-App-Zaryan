@@ -1,9 +1,8 @@
+"use server";
 import { redirect } from "next/navigation";
 import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import SalesClient from "./_components/SalesClient";
-
-export const dynamic = "force-dynamic";
 
 export default async function SalesPage() {
   const user = await currentUser();

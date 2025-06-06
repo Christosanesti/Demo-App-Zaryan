@@ -4,24 +4,18 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 
 const ledgerEntrySchema = z.object({
-  type: z.enum([
-    "BANK",
-    "EXPENSE",
-    "SALARY",
-    "PURCHASE",
-    "SALE",
-    "CUSTOMER",
-    "CUSTOM",
-  ]),
+  type: z.enum(["INCOME", "EXPENSE", "TRANSFER", "ADJUSTMENT", "CUSTOM"]),
   customType: z.string().optional(),
   title: z.string().min(1, "Title is required"),
   description: z.string().optional(),
   amount: z.number().positive("Amount must be positive"),
-  transactionType: z.enum(["DEBIT", "CREDIT"]),
+  transactionType: z.enum(["DEBIT", "CREDIT", "TRANSFER", "ADJUSTMENT"]),
   date: z.string().min(1, "Date is required"),
   reference: z.string().optional(),
   category: z.string().optional(),
-  paymentMethod: z.enum(["CASH", "BANK", "MOBILE"]).optional(),
+  paymentMethod: z
+    .enum(["CASH", "BANK", "MOBILE", "CREDIT", "OTHER"])
+    .optional(),
   tags: z.string().optional(),
 });
 

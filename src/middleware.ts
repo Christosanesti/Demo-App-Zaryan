@@ -16,6 +16,11 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next();
   }
 
+  // Allow uploadthing routes without auth
+  if (req.url.includes("/api/uploadthing")) {
+    return NextResponse.next();
+  }
+
   // For API routes, handle auth differently
   if (isApiRoute(req)) {
     try {

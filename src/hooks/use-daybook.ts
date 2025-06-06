@@ -48,7 +48,7 @@ interface UpdateDaybookData extends Partial<CreateDaybookData> {
 export const useDaybook = () => {
   const queryClient = useQueryClient();
 
-  const { data: entries, isLoading } = useQuery<DaybookEntry[]>({
+  const { data, isLoading } = useQuery<{ entries: DaybookEntry[] }>({
     queryKey: ["daybook"],
     queryFn: async () => {
       const response = await fetch("/api/daybook");
@@ -61,9 +61,7 @@ export const useDaybook = () => {
 
   // Calculate summary based on entries
   const summary = useMemo(() => {
-    if (!entries) {
-      return { income: 0, expense: 0, balance: 0 };
-    }
+    const entries = data?.entries || [];
 
     const income = entries
       .filter((entry) => entry.type === "income")
@@ -76,7 +74,7 @@ export const useDaybook = () => {
     const balance = income - expense;
 
     return { income, expense, balance };
-  }, [entries]);
+  }, [data?.entries]);
 
   const { mutate: createEntry, isPending: isCreating } = useMutation({
     mutationFn: async (newEntry: CreateDaybookData) => {
@@ -157,7 +155,7 @@ export const useDaybook = () => {
   });
 
   return {
-    entries,
+    entries: data?.entries || [],
     summary,
     isLoading,
     createEntry,

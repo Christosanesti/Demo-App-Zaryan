@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/auth";
+import { currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-
 const entrySchema = z.object({
   date: z.string().transform((str) => new Date(str)),
   type: z.enum(["income", "expense"]),
@@ -51,7 +51,12 @@ export async function GET() {
 // POST /api/daybook
 export async function POST(req: Request) {
   try {
-    const { user } = await getAuthUser();
+    const user = await currentUser();
+    if (!user) {
+      return new NextResponse(JSON.stringify({ message: "Unauthorized" }), {
+        status: 401,
+      });
+    }
 
     const body = await req.json();
     console.log("Received request body:", body);

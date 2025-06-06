@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentUser } from "@clerk/nextjs/server";
 
 export async function GET(
   req: Request,
   context: { params: Promise<{ entryId: string }> }
 ) {
   try {
-    const { user } = await getAuthUser();
+    const user = await currentUser();
+    if (!user) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
     const params = await context.params;
 
     const entry = await prisma.daybookEntry.findUnique({

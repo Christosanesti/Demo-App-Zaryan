@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { ensureUserInDB } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { currentUser } from "@clerk/nextjs/server";
+import { db } from "@/lib/db";
+import { addMonths, startOfDay } from "date-fns";
 
 const createSaleSchema = z.object({
   customerId: z.string().min(1),
@@ -12,126 +14,149 @@ const createSaleSchema = z.object({
   installmentMonths: z.number().int().min(1),
 });
 
+const saleSchema = z.object({
+  customerId: z.string(),
+  itemId: z.string(),
+  totalAmount: z.number().positive(),
+  advanceAmount: z.number().min(0),
+  paymentMode: z.enum(["CASH", "BANK"]),
+  duration: z.number().int().min(1),
+});
+
 export async function POST(req: Request) {
   try {
-    const { clerkUser: user } = await ensureUserInDB();
+    const user = await currentUser();
+
+    if (!user) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
 
     const body = await req.json();
-    const validatedData = createSaleSchema.parse(body);
+    const validatedData = saleSchema.parse(body);
 
-    // Start a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create the sale
-      const sale = await tx.sale.create({
-        data: {
-          customerId: validatedData.customerId,
-          amount: validatedData.amount,
-          paymentMode: validatedData.paymentMode,
-          installmentMonths: validatedData.installmentMonths,
-          advance: validatedData.advancePayment,
-          userId: user.id,
-          userName:
-            user.firstName || user.emailAddresses[0]?.emailAddress || "Unknown",
-          date: new Date(),
-          itemId: validatedData.inventoryId,
-        },
-      });
+    // Generate a unique reference number
+    const reference = `SALE-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-      // Calculate installment amount
-      const remainingAmount =
-        validatedData.amount - validatedData.advancePayment;
-      const installmentAmount =
-        remainingAmount / validatedData.installmentMonths;
-
-      // Create installments
-      const installments = [];
-      for (let i = 0; i < validatedData.installmentMonths; i++) {
-        const dueDate = new Date();
-        dueDate.setMonth(dueDate.getMonth() + i + 1);
-
-        installments.push(
-          tx.installment.create({
-            data: {
-              saleId: sale.id,
-              customerId: validatedData.customerId,
-              userId: user.id,
-              userName:
-                user.firstName ||
-                user.emailAddresses[0]?.emailAddress ||
-                "Unknown",
-              amount: installmentAmount,
-              dueDate,
-              date: new Date(),
-              description: `Installment ${i + 1} for sale #${sale.id}`,
-            },
-          })
-        );
-      }
-
-      // Create daybook entry for advance payment if any
-      if (validatedData.advancePayment > 0) {
-        await tx.daybookEntry.create({
-          data: {
-            userId: user.id,
-            userName:
-              user.firstName ||
-              user.emailAddresses[0]?.emailAddress ||
-              "Unknown",
-            date: new Date(),
-            amount: validatedData.advancePayment,
-            type: "income",
-            description: `Advance payment for sale #${sale.id}`,
-            reference: `SALE-${sale.id}`,
-            category: "sales",
-            paymentMethod: validatedData.paymentMode,
-            status: "completed",
-          },
-        });
-      }
-
-      // Update inventory quantity
-      await tx.inventory.update({
-        where: { id: validatedData.inventoryId },
-        data: {
-          quantity: {
-            decrement: 1,
-          },
-        },
-      });
-
-      return { sale, installments: await Promise.all(installments) };
+    // Create the sale
+    const sale = await db.sale.create({
+      data: {
+        userId: user.id,
+        customerId: validatedData.customerId,
+        itemId: validatedData.itemId,
+        reference,
+        totalAmount: validatedData.totalAmount,
+        advanceAmount: validatedData.advanceAmount,
+        paymentMode: validatedData.paymentMode,
+        duration: validatedData.duration,
+      },
     });
 
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error("[SALE_POST]", error);
-    if (error instanceof z.ZodError) {
-      return new NextResponse("Invalid request data", { status: 400 });
+    // Calculate installment amount
+    const remainingAmount =
+      validatedData.totalAmount - validatedData.advanceAmount;
+    const installmentAmount = remainingAmount / validatedData.duration;
+
+    // Create installments
+    const installments = await Promise.all(
+      Array.from({ length: validatedData.duration }, (_, i) => {
+        const dueDate = addMonths(new Date(), i + 1);
+        return db.installment.create({
+          data: {
+            saleId: sale.id,
+            userId: user.id,
+            amount: installmentAmount,
+            dueDate: startOfDay(dueDate),
+            status: "PENDING",
+          },
+        });
+      })
+    );
+
+    // Create daybook entry for the sale
+    const daybookEntry = await db.daybookEntry.create({
+      data: {
+        userId: user.id,
+        customerId: validatedData.customerId,
+        saleId: sale.id,
+        type: "INCOME",
+        amount: validatedData.totalAmount,
+        description: `Sale of item (${reference})`,
+        date: new Date(),
+      },
+    });
+
+    // If there's an advance payment, create a daybook entry for it
+    if (validatedData.advanceAmount > 0) {
+      await db.daybookEntry.create({
+        data: {
+          userId: user.id,
+          customerId: validatedData.customerId,
+          saleId: sale.id,
+          type: "INCOME",
+          amount: validatedData.advanceAmount,
+          description: `Advance payment for sale (${reference})`,
+          date: new Date(),
+        },
+      });
     }
-    return new NextResponse("Internal error", { status: 500 });
+
+    // If payment mode is BANK, create a ledger entry
+    if (validatedData.paymentMode === "BANK") {
+      await db.ledgerEntry.create({
+        data: {
+          userId: user.id,
+          customerId: validatedData.customerId,
+          type: "INCOME",
+          title: `Sale Payment (${reference})`,
+          amount: validatedData.advanceAmount,
+          description: `Advance payment for sale`,
+          transactionType: "CREDIT",
+          paymentMethod: "BANK",
+          date: new Date(),
+        },
+      });
+    }
+
+    return NextResponse.json({
+      sale,
+      installments,
+      daybookEntry,
+    });
+  } catch (error) {
+    console.error("[SALES_POST]", error);
+    if (error instanceof z.ZodError) {
+      return new NextResponse(JSON.stringify({ error: error.errors }), {
+        status: 400,
+      });
+    }
+    return new NextResponse("Internal Error", { status: 500 });
   }
 }
 
 export async function GET(req: Request) {
   try {
-    const { clerkUser: user } = await ensureUserInDB();
+    const user = await currentUser();
+
+    if (!user) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
 
     const { searchParams } = new URL(req.url);
     const customerId = searchParams.get("customerId");
-    const status = searchParams.get("status");
 
-    const where = {
-      userId: user.id,
-      ...(customerId && { customerId }),
-      ...(status && { status }),
-    };
-
-    const sales = await prisma.sale.findMany({
-      where,
+    const sales = await db.sale.findMany({
+      where: {
+        userId: user.id,
+        ...(customerId ? { customerId } : {}),
+      },
       include: {
         customer: true,
         item: true,
-        installments: true,
+        installments: {
+          orderBy: {
+            dueDate: "asc",
+          },
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -140,8 +165,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json(sales);
   } catch (error) {
-    console.error("[SALE_GET]", error);
-    return new NextResponse("Internal error", { status: 500 });
+    console.error("[SALES_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
   }
 }
 
