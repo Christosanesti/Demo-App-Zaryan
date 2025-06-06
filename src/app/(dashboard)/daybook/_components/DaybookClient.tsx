@@ -114,16 +114,17 @@ export function DaybookClient() {
     status: "",
   });
 
-  const { data: entries, isLoading } = useQuery({
-    queryKey: ["daybook-entries"],
-    queryFn: async () => {
-      const res = await fetch("/api/daybook");
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
-  });
-
-  const { summary, createEntry } = useDaybook();
+  const {
+    entries,
+    summary,
+    isLoading,
+    createEntry,
+    isCreating,
+    updateEntry,
+    isUpdating,
+    deleteEntry,
+    isDeleting,
+  } = useDaybook();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -149,11 +150,11 @@ export function DaybookClient() {
         },
         body: JSON.stringify(values),
       });
+      const data = await response.json();
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create entry");
+        throw new Error(data.error || "Failed to create entry");
       }
-      return response.json();
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["daybook-entries"] });
@@ -163,7 +164,7 @@ export function DaybookClient() {
       });
       setIsSheetOpen(false);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast.error("Failed to create entry", {
         description: error.message,
       });
@@ -240,9 +241,9 @@ export function DaybookClient() {
   // Memoized values
   const safeSummary = useMemo(
     () => ({
-      income: typeof summary?.income === "number" ? summary.income : 0,
-      expense: typeof summary?.expense === "number" ? summary.expense : 0,
-      balance: typeof summary?.balance === "number" ? summary.balance : 0,
+      income: summary?.income || 0,
+      expense: summary?.expense || 0,
+      balance: summary?.balance || 0,
     }),
     [summary]
   );
@@ -261,15 +262,33 @@ export function DaybookClient() {
           format(selectedDate, "yyyy-MM-dd")
         : true;
 
-      return matchesSearch && matchesDate;
+      const matchesType = filters.type ? entry.type === filters.type : true;
+      const matchesCategory =
+        filters.category ? entry.category === filters.category : true;
+      const matchesStatus =
+        filters.status ? entry.status === filters.status : true;
+
+      return (
+        matchesSearch &&
+        matchesDate &&
+        matchesType &&
+        matchesCategory &&
+        matchesStatus
+      );
     });
-  }, [entries, searchQuery, selectedDate]);
+  }, [entries, searchQuery, selectedDate, filters]);
 
   const totalIncome = useMemo(
     () =>
       filteredEntries
         .filter((entry: any) => entry.type === "income")
-        .reduce((sum: number, entry: any) => sum + entry.amount, 0),
+        .reduce((sum: number, entry: any) => {
+          const amount =
+            typeof entry.amount === "string" ?
+              parseFloat(entry.amount)
+            : entry.amount;
+          return sum + (isNaN(amount) ? 0 : amount);
+        }, 0),
     [filteredEntries]
   );
 
@@ -277,7 +296,13 @@ export function DaybookClient() {
     () =>
       filteredEntries
         .filter((entry: any) => entry.type === "expense")
-        .reduce((sum: number, entry: any) => sum + entry.amount, 0),
+        .reduce((sum: number, entry: any) => {
+          const amount =
+            typeof entry.amount === "string" ?
+              parseFloat(entry.amount)
+            : entry.amount;
+          return sum + (isNaN(amount) ? 0 : amount);
+        }, 0),
     [filteredEntries]
   );
 
@@ -287,115 +312,39 @@ export function DaybookClient() {
   );
 
   // Group entries by date
-  const groupedEntries = useMemo(
-    () =>
-      filteredEntries.reduce((groups: any, entry: any) => {
-        const date = format(new Date(entry.date), "yyyy-MM-dd");
-        if (!groups[date]) {
-          groups[date] = [];
-        }
-        groups[date].push(entry);
-        return groups;
-      }, {}),
-    [filteredEntries]
-  );
+  const groupedEntries = useMemo(() => {
+    const groups: { [key: string]: any[] } = {};
+    filteredEntries.forEach((entry: any) => {
+      const date = format(new Date(entry.date), "yyyy-MM-dd");
+      if (!groups[date]) {
+        groups[date] = [];
+      }
+      groups[date].push(entry);
+    });
+    return groups;
+  }, [filteredEntries]);
 
-  // Sort dates
+  // Sort dates in descending order
   const sortedDates = useMemo(
-    () =>
-      Object.keys(groupedEntries).sort(
-        (a, b) => new Date(b).getTime() - new Date(a).getTime()
-      ),
+    () => Object.keys(groupedEntries).sort((a, b) => b.localeCompare(a)),
     [groupedEntries]
   );
 
   if (isLoading) {
     return (
-      <div className="min-h-screen p-6">
-        <div className="max-w-7xl mx-auto space-y-8">
-          {/* Header Skeleton */}
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-transparent to-purple-500/5 rounded-2xl" />
-            <div className="relative bg-slate-800/40 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div className="space-y-3">
-                  <Skeleton className="h-10 w-48" />
-                  <Skeleton className="h-6 w-72" />
-                  <div className="flex items-center gap-2">
-                    <Skeleton className="h-6 w-24" />
-                    <Skeleton className="h-6 w-16" />
-                  </div>
-                </div>
-                <Skeleton className="h-10 w-32" />
-              </div>
-            </div>
-          </div>
-
-          {/* Summary Cards Skeleton */}
-          <div className="grid gap-6 md:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Card
-                key={i}
-                className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50"
-              >
-                <CardHeader>
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-24" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-24" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Search and Filter Skeleton */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Skeleton className="h-10 flex-1" />
-            <Skeleton className="h-10 w-[240px]" />
-          </div>
-
-          {/* Entries List Skeleton */}
-          <div className="space-y-8">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Skeleton className="h-6 w-48" />
-                  <Skeleton className="h-6 w-24" />
-                </div>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <Card
-                      key={i}
-                      className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50"
-                    >
-                      <CardHeader>
-                        <Skeleton className="h-6 w-3/4" />
-                        <Skeleton className="h-4 w-1/2" />
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <Skeleton className="h-4 w-full" />
-                          <Skeleton className="h-4 w-2/3" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className="space-y-4">
+        <Skeleton className="h-12 w-full rounded-lg" />
+        <Skeleton className="h-32 w-full rounded-lg" />
+        <Skeleton className="h-8 w-1/2 rounded-lg" />
       </div>
     );
   }
 
   const onSubmit = async (values: FormValues) => {
     try {
-      await createEntry({
+      await createMutation.mutateAsync({
         ...values,
-        paymentMethod:
-          values.paymentMethod === "mobile" ? "mobileI" : values.paymentMethod,
+        reference: values.reference || `ref-${Date.now()}`,
       });
       setIsSheetOpen(false);
       form.reset();
@@ -497,8 +446,8 @@ export function DaybookClient() {
 
                   <ScrollArea className="h-[calc(100vh-8rem)] pr-4">
                     <DaybookForm
-                      onSubmit={createMutation.mutate}
-                      isSubmitting={createMutation.isPending}
+                      onSubmit={onSubmit}
+                      isSubmitting={isCreating}
                       onCancel={() => setIsSheetOpen(false)}
                     />
                   </ScrollArea>
@@ -597,69 +546,87 @@ export function DaybookClient() {
         )}
 
         {/* Summary Cards */}
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-3">
           <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
-            <CardHeader>
-              <CardTitle className="text-slate-200">Total Income</CardTitle>
-              <CardDescription className="text-slate-400">
-                Today's income
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-slate-200">
+                Total Income
+              </CardTitle>
+              <svg
+                className="h-4 w-4 text-emerald-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-emerald-400">
-                <CountUp
-                  end={totalIncome}
-                  decimals={2}
-                  prefix="$"
-                  duration={1.5}
-                  separator=","
-                />
-              </p>
+              <div className="text-2xl font-bold text-emerald-400">
+                ${safeSummary.income.toFixed(2)}
+              </div>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
-            <CardHeader>
-              <CardTitle className="text-slate-200">Total Expenses</CardTitle>
-              <CardDescription className="text-slate-400">
-                Today's expenses
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-slate-200">
+                Total Expenses
+              </CardTitle>
+              <svg
+                className="h-4 w-4 text-red-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-red-400">
-                <CountUp
-                  end={totalExpenses}
-                  decimals={2}
-                  prefix="$"
-                  duration={1.5}
-                  separator=","
-                />
-              </p>
+              <div className="text-2xl font-bold text-red-400">
+                ${safeSummary.expense.toFixed(2)}
+              </div>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
-            <CardHeader>
-              <CardTitle className="text-slate-200">Cash in Hand</CardTitle>
-              <CardDescription className="text-slate-400">
-                Current balance
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-slate-200">
+                Cash in Hand
+              </CardTitle>
+              <svg
+                className="h-4 w-4 text-blue-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
             </CardHeader>
             <CardContent>
-              <p
+              <div
                 className={cn(
                   "text-2xl font-bold",
-                  cashInHand >= 0 ? "text-emerald-400" : "text-red-400"
+                  safeSummary.balance >= 0 ? "text-emerald-400" : "text-red-400"
                 )}
               >
-                <CountUp
-                  end={cashInHand}
-                  decimals={2}
-                  prefix="$"
-                  duration={1.5}
-                  separator=","
-                />
-              </p>
+                ${safeSummary.balance.toFixed(2)}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -836,22 +803,21 @@ export function DaybookClient() {
                                     "Income"
                                   : "Expense"}
                                 </Badge>
-                                <p
-                                  className={cn(
-                                    "text-lg font-semibold",
-                                    entry.type === "income" ?
-                                      "text-emerald-400"
-                                    : "text-red-400"
-                                  )}
-                                >
-                                  <CountUp
-                                    end={entry.amount}
-                                    decimals={2}
-                                    prefix="$"
-                                    duration={1}
-                                    separator=","
-                                  />
-                                </p>
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-slate-400">
+                                    Amount:
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "font-medium",
+                                      entry.type === "income" ?
+                                        "text-emerald-400"
+                                      : "text-red-400"
+                                    )}
+                                  >
+                                    ${Number(entry.amount).toFixed(2)}
+                                  </span>
+                                </div>
                               </div>
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between text-sm">

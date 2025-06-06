@@ -1,29 +1,37 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthUser } from "@/lib/auth";
+import { currentUser } from "@clerk/nextjs/server";
 
 export async function GET() {
   try {
-    const { user } = await getAuthUser();
-
+    const user = await currentUser();
+    if (!user) {
+      return new NextResponse(JSON.stringify({ message: "Unauthorized" }), {
+        status: 401,
+      });
+    }
     const overduePayments = await prisma.daybookEntry.findMany({
       where: {
         userId: user.id,
         type: "expense",
         status: "pending",
-        dueDate: {
-          lt: new Date(), // Less than current date
+        date: {
+          lt: new Date(),
         },
       },
       orderBy: {
-        dueDate: "asc",
+        date: "asc",
       },
       include: {
-        customer: true, // Include customer details if you have a relation
+        customer: true,
       },
     });
-
-    return NextResponse.json({ overduePayments });
+    return NextResponse.json({
+      overduePayments: (overduePayments ?? []).map((entry) => ({
+        ...entry,
+        attachments: entry.attachments ? JSON.parse(entry.attachments) : [],
+      })),
+    });
   } catch (error) {
     console.error("[OVERDUE_PAYMENTS_GET]", error);
     return new NextResponse(

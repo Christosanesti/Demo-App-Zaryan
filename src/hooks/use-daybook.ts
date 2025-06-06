@@ -48,33 +48,25 @@ interface UpdateDaybookData extends Partial<CreateDaybookData> {
 export const useDaybook = () => {
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery<{ entries: DaybookEntry[] }>({
+  const { data, isLoading } = useQuery<DaybookSummary>({
     queryKey: ["daybook"],
     queryFn: async () => {
       const response = await fetch("/api/daybook");
       if (!response.ok) {
         throw new Error("Failed to fetch daybook entries");
       }
-      return response.json();
+      const data = await response.json();
+      return {
+        entries: data.entries.map((entry: any) => ({
+          ...entry,
+          date: new Date(entry.date),
+          createdAt: new Date(entry.createdAt),
+          updatedAt: new Date(entry.updatedAt),
+        })),
+        summary: data.summary,
+      };
     },
   });
-
-  // Calculate summary based on entries
-  const summary = useMemo(() => {
-    const entries = data?.entries || [];
-
-    const income = entries
-      .filter((entry) => entry.type === "income")
-      .reduce((sum, entry) => sum + entry.amount, 0);
-
-    const expense = entries
-      .filter((entry) => entry.type === "expense")
-      .reduce((sum, entry) => sum + entry.amount, 0);
-
-    const balance = income - expense;
-
-    return { income, expense, balance };
-  }, [data?.entries]);
 
   const { mutate: createEntry, isPending: isCreating } = useMutation({
     mutationFn: async (newEntry: CreateDaybookData) => {
@@ -106,13 +98,14 @@ export const useDaybook = () => {
   });
 
   const { mutate: updateEntry, isPending: isUpdating } = useMutation({
-    mutationFn: async (
-      updatedEntry: Partial<DaybookEntry> & { id: string }
-    ) => {
+    mutationFn: async (updatedEntry: UpdateDaybookData) => {
       const response = await fetch(`/api/daybook/${updatedEntry.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedEntry),
+        body: JSON.stringify({
+          ...updatedEntry,
+          date: updatedEntry.date?.toISOString(),
+        }),
       });
       if (!response.ok) {
         throw new Error("Failed to update daybook entry");
@@ -156,7 +149,7 @@ export const useDaybook = () => {
 
   return {
     entries: data?.entries || [],
-    summary,
+    summary: data?.summary || { income: 0, expense: 0, balance: 0 },
     isLoading,
     createEntry,
     isCreating,
